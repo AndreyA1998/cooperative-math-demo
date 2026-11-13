@@ -210,7 +210,11 @@ async function showSchema(schema) {
   target.classList.remove("formatted-presentation");
   target.textContent = data.problem_template;
   const viewport = byId("tree-viewport");
-  viewport.scrollLeft = (Number(tree.getAttribute("width")) - viewport.clientWidth) / 2;
+  const root = tree.querySelector(".tree-root").getBoundingClientRect();
+  const frame = viewport.getBoundingClientRect();
+  // An asymmetric tree's root need not lie at the center of the full canvas.
+  viewport.scrollLeft += root.left + root.width / 2
+    - frame.left - viewport.clientLeft - viewport.clientWidth / 2;
   viewport.scrollTop = 0;
   try {
     templatePresentation = (await postJSON("presentation", '{"schema":' + schema.raw + ',"seed":null}')).data;

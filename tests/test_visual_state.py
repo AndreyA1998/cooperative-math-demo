@@ -70,3 +70,60 @@ class VisualStateTests(unittest.TestCase):
                   return "OK: exact seeds, filter memory and in-place tree/card values";
                 ''')
                 self.assertIn('OK:', result)
+
+    def test_large_asymmetric_tree_starts_at_root_and_keeps_manual_pan_on_fill(self):
+        with tempfile.TemporaryDirectory(prefix='math-demo-tree-viewport-') as folder:
+            runner = prepare_browser(folder)
+            with static_origin() as server:
+                result = run_browser(runner, server.url, r'''
+                  await until(idleAtomic, "initial runtime");
+                  $("composite-tab").click();
+                  $("composite-structure-seed-mode").click();
+                  $("composite-structure-seed").value = "42";
+                  $("composite-depth").value = "12";
+                  $("composite-width").value = "128";
+                  const viewport = $("composite-tree-viewport");
+                  const rootIsVisible = label => {
+                    const frame = viewport.getBoundingClientRect();
+                    const root = $("composite-tree").querySelector(".tree-root").getBoundingClientRect();
+                    const left = frame.left + viewport.clientLeft;
+                    const top = frame.top + viewport.clientTop;
+                    check(root.left >= left - 1 && root.right <= left + viewport.clientWidth + 1 &&
+                          root.top >= top - 1 && root.bottom <= top + viewport.clientHeight + 1,
+                          label + ": root is outside the tree viewport");
+                    check(Math.abs(root.left + root.width / 2 - left - viewport.clientWidth / 2) <= 1,
+                          label + ": viewport is not centered on the root");
+                  };
+                  const panIs = (position, label) => {
+                    check(Math.abs(viewport.scrollLeft - position[0]) <= 1 &&
+                          Math.abs(viewport.scrollTop - position[1]) <= 1,
+                          label + ": changed the user's tree pan");
+                  };
+                  $("composite-structure-random").click();
+                  await until(idleComposite, "large asymmetric schema");
+                  check($("composite-tree").querySelectorAll(".tree-node").length > 128,
+                        "Regression did not build the requested large tree");
+                  rootIsVisible("new schema");
+                  const initialPan = [viewport.scrollLeft, viewport.scrollTop];
+                  $("composite-parameter-seed-mode").click();
+                  $("composite-parameter-seed").value = "17";
+                  $("composite-parameter-random").click();
+                  await until(idleComposite, "large filled tree");
+                  rootIsVisible("filled schema");
+                  panIs(initialPan, "initial fill");
+                  viewport.scrollLeft += 347;
+                  viewport.scrollTop = 243;
+                  const manualPan = [viewport.scrollLeft, viewport.scrollTop];
+                  check(manualPan[1] > 0, "Regression did not pan the tall tree");
+                  $("composite-parameter-random").click();
+                  await until(idleComposite, "refill after manual pan");
+                  panIs(manualPan, "refill");
+                  $("composite-reset-parameters").click();
+                  panIs(manualPan, "reset");
+                  $("composite-structure-random").click();
+                  await until(idleComposite, "replacement schema");
+                  rootIsVisible("replacement schema");
+                  check(viewport.scrollTop === 0, "Replacement schema kept an old vertical pan");
+                  return "OK: large asymmetric root visible; fill/reset preserve manual pan";
+                ''')
+                self.assertIn('OK:', result)
