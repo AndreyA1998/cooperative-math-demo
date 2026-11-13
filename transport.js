@@ -26,4 +26,6 @@ retry?.addEventListener('click', () => {
 });
 export const request = (method, path, query = '', body = null) => rpc.request(method, path, query, body);
 
-export function hideIdleRuntime() { if (!rpc.worker && banner) banner.hidden = true; }
+// A cached catalogue can render an empty page without making an API request.
+// Prepare Python immediately so the first explicit task uses this same worker.
+try { rpc.start(); } catch (error) { rpc.fail(error); }

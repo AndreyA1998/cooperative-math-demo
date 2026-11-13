@@ -1,4 +1,4 @@
-import { request, hideIdleRuntime } from "./transport.js";
+import { request } from "./transport.js";
 import { MathPresentation } from "./math-renderer.js";
 import { readViewState, saveViewState, readCatalogueCache, saveCatalogueCache } from "./view-state.js";
 
@@ -182,8 +182,7 @@ async function init() {
   try {
     const cache = await readCatalogueCache();
     catalogue = cache.problems ?? (await getJSON("catalogue")).problems;
-    if (cache.problems) hideIdleRuntime();
-    else await saveCatalogueCache(cache.version, catalogue);
+    if (!cache.problems) await saveCatalogueCache(cache.version, catalogue);
     const subjects = [...new Set(catalogue.map(({ subject }) => subject))];
     subjectSelect.replaceChildren(...subjects.map((subject) => new Option(subjectNames[subject] ?? subject, subject)));
     subjectSelect.value = subjects.includes("algebra") ? "algebra" : subjects[0];

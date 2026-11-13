@@ -111,6 +111,7 @@ class TreeFlowTests(unittest.TestCase):
                   check($("composite-root-answer").textContent === expected.answer, "Root answer changed");
                   check(viewport.scrollLeft === pan[0] && viewport.scrollTop === pan[1], "Filling reset manual tree pan");
                   check(parseFloat(getComputedStyle($("composite-root-answer")).fontSize) >= 20, "Answer is still too small");
+                  check(parseFloat(getComputedStyle($("composite-instance-result").querySelector("span")).fontSize) >= 16, "Answer label is still too small");
                   $("composite-reset-parameters").click();
                   stages(false);
                   check(tree.innerHTML === bareTree, "Reset changed the bare flow labels or tree");
