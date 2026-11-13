@@ -10,7 +10,7 @@ class VisualStateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='math-demo-state-') as folder:
             runner = prepare_browser(folder)
             with static_origin() as server:
-                result = run_browser(runner, server.url, r'''
+                result = run_browser(runner, server.url + "?id=prealgebra/test/11", r'''
                   check($("atomic-reset"), "Atomic task has no reset to the bare pattern");
                   await until(idleAtomic, "initial bare pattern");
                   check($("atomic-problem-text").querySelector(".parameter-slot, [data-parameters]"), "Initial task has no symbolic slots");
@@ -76,7 +76,7 @@ class VisualStateTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='math-demo-tree-viewport-') as folder:
             runner = prepare_browser(folder)
             with static_origin() as server:
-                result = run_browser(runner, server.url, r'''
+                result = run_browser(runner, server.url + "?id=prealgebra/test/11", r'''
                   await until(idleAtomic, "initial runtime");
                   $("composite-tab").click();
                   $("composite-structure-seed-mode").click();

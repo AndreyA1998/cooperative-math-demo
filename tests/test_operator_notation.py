@@ -14,7 +14,7 @@ class OperatorNotationTests(unittest.TestCase):
 
     def test_user_case_is_floor_of_half_the_numerator(self):
         formula, notes = _operator_math(self.modular(1, 0, 2), 'R5')
-        self.assertIn(r'\left\lfloor\frac{\text{числитель}\left(\text{выход №5}\right)}{2}\right\rfloor', formula)
+        self.assertIn(r'\left\lfloor\frac{\text{числитель}\left(\operatorname{Ans}(5)\right)}{2}\right\rfloor', formula)
         self.assertNotIn('знаменатель', formula)
         self.assertNotIn('N_{', formula)
         self.assertNotIn('R_{', formula)
@@ -23,15 +23,15 @@ class OperatorNotationTests(unittest.TestCase):
 
     def test_integer_expression_needs_no_floor_and_keeps_negative_signs(self):
         formula, notes = _operator_math(self.modular(-1, 2, 1), 'R5')
-        self.assertIn(r'\operatorname{mod}\left(-\text{числитель}\left(\text{выход №5}\right)+2\text{знаменатель}\left(\text{выход №5}\right),2\right)<1', formula)
+        self.assertIn(r'\operatorname{mod}\left(-\text{числитель}\left(\operatorname{Ans}(5)\right)+2\text{знаменатель}\left(\operatorname{Ans}(5)\right),2\right)<1', formula)
         self.assertNotIn('floor', formula)
         self.assertFalse(any('округление вниз' in note for note in notes))
 
     def test_affine_rules_preserve_rationals_and_remove_redundant_factors(self):
         for scale, offset, expected in (
-            (1, 0, r'\text{выход №5}'),
-            (-1, -3, r'-\text{выход №5}-3'),
-            ('1/2', '5/3', r'\frac{1}{2}\text{выход №5}+\frac{5}{3}'),
+            (1, 0, r'\operatorname{Ans}(5)'),
+            (-1, -3, r'-\operatorname{Ans}(5)-3'),
+            ('1/2', '5/3', r'\frac{1}{2}\operatorname{Ans}(5)+\frac{5}{3}'),
             (0, 0, '0'),
         ):
             with self.subTest(scale=scale, offset=offset):

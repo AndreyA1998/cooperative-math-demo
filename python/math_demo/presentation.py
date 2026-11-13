@@ -62,7 +62,7 @@ def _linear_math(terms, offset=0):
 
 
 def _operator_math(operator, label):
-    ref = r'\text{выход №' + label[1:] + '}'
+    ref = r'\operatorname{Ans}(' + label[1:] + ')'
     kind = operator['kind']
     if kind == 'identity':
         return ref, []
@@ -90,8 +90,8 @@ def _operator_math(operator, label):
     return (r'\begin{cases}' + _number(first) + r' & ' + condition + r'\\' + _number(second) + r' & \text{otherwise}\end{cases}', notes)
 
 
-def _adapter_math(node, by_id):
-    names, rows = node['profile']['parameter_names'], node['profile']['rows']
+def _local_adapter_names(names):
+    """One namespace for formulas and edge annotations, including collisions."""
     used = set(names)
     def local(prefix, index):
         label = prefix + str(index + 1)
@@ -99,7 +99,12 @@ def _adapter_math(node, by_id):
             label = '_' + label
         used.add(label)
         return label
-    signals = [local('u', i) for i in range(len(names))]
+    return [local('u', i) for i in range(len(names))], local
+
+
+def _adapter_math(node, by_id):
+    names, rows = node['profile']['parameter_names'], node['profile']['rows']
+    signals, local = _local_adapter_names(names)
     rules, notes = [], []
     for binding in node['bindings']:
         expression, definitions = _operator_math(binding['operator'], by_id[binding['source_node']]['label'])
@@ -186,19 +191,23 @@ def _presentation_validated(schema, instance=None):
                    'text': None if params is None else _display_value(params[name])}
                   for name in node['profile']['parameter_names']]
         incoming = []
+        signals, _ = _local_adapter_names(node['profile']['parameter_names'])
         for binding in node['bindings']:
             source = binding['source_node']
             answer = None if instance is None else trace[source]['answer']
             incoming.append({'source_node': source, 'source_label': by_id[source]['label'],
                              'input_index': binding['input_index'],
+                             'signal_name': signals[binding['input_index']],
                              'input_name': node['profile']['parameter_names'][binding['input_index']],
                              'answer': answer,
                              'value': None if answer is None else _display_value(evaluate_adapter(binding['operator'], answer))})
         nodes.append({'node_id': node['node_id'], 'label': node['label'], 'number': node['number'],
                       'source_id': node['source_id'], 'kind': 'bottom' if external else 'internal',
                       'inputs': inputs, 'segments': segments, 'notes': notes + rule_notes,
+                      'question_notes': notes, 'adapter_notes': rule_notes,
                       'answer': None if row is None else row['answer'], 'incoming': incoming,
-                      'adapter': '' if external else _render_inputs(node, by_id),
+                      'adapter': '' if external else _render_inputs(
+                          node, by_id, **({'text_version': schema['text_version']} if 'text_version' in schema else {})),
                       'adapter_math': rules, 'scope': scope})
     return {'version': 'composite-presentation-2', 'mode': 'template' if instance is None else 'instance',
             'introduction': ['Solve the numbered subproblems in order. Use each answer in the rules referring to that subproblem.',

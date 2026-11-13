@@ -29,7 +29,7 @@ class FrontendErrorStateTests(unittest.TestCase):
 
     def run_case(self, script):
         with static_origin() as server:
-            return run_browser(self.runner, server.url, FAULT_INJECTION + script)
+            return run_browser(self.runner, server.url + "?id=prealgebra/test/11", FAULT_INJECTION + script)
 
     def test_failed_template_selection_can_fill_current_task_without_reselection(self):
         output = self.run_case(r'''
@@ -46,7 +46,11 @@ class FrontendErrorStateTests(unittest.TestCase):
           $("atomic-generate").click();
           await until(() => !$("atomic-catalogue-controls").disabled, "retry fill", {allowError: true});
           check($("atomic-status").hidden, "Fill did not recover after template failure: " + $("atomic-status").textContent);
-          check($("atomic-problem-title").textContent.includes(chosen.split("/").at(-1)), "Recovered card belongs to the old task");
+          check($("atomic-problem-title").textContent === "Задача", "Card title leaks the source task number");
+          check(new URL(location.href).searchParams.get("id") === chosen && $("atomic-problem-id").value === chosen, "Recovered card belongs to the old task");
+          const {request} = await import("./transport.js");
+          const expected = await request("GET", "/api/generate", new URLSearchParams({id: chosen, seed: new URL(location.href).searchParams.get("seed")}).toString());
+          check($("atomic-answer-value").textContent === expected.data.answer, "Recovered answer belongs to the old task");
           check($("atomic-answer-value").textContent !== "—", "Recovered task has no answer");
           change("atomic-problem-id", previous);
           await until(idleAtomic, "previous cached task");
@@ -71,7 +75,7 @@ class FrontendErrorStateTests(unittest.TestCase):
           $("composite-reset-parameters").click();
           await until(idleComposite, "reset after presentation failure");
           check(!$("composite-public-template").querySelector(".slot-filled, .subproblem-answer"), "Reset left filled values or answers under the bare tree");
-          check($("composite-instance-result").hidden, "Reset left the root answer visible");
+          check(!$("composite-instance-result").hidden && $("composite-root-answer").textContent === "—", "Reset must replace the root answer with a visible dash");
           return "OK: reset restores bare state after optional presentation failure";
         ''')
         self.assertIn('OK:', output)

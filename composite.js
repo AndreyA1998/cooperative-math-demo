@@ -39,19 +39,28 @@ function origin(sourceId) {
   const [subject, split, number] = sourceId.split("/");
   return { subject: subjectNames[subject] ?? subject, detail: "№ " + number + " · " + split };
 }
-function layoutTree(schema) {
+function layoutTree(schema, flowByNode) {
   const nodes = new Map(schema.nodes.map((node) => [node.node_id, node]));
   const positions = new Map();
+  const gaps = [];
+  function measure(id, row) {
+    gaps[row] = Math.max(gaps[row] ?? rowHeight - nodeHeight,
+      ...flowByNode.get(id).map((flow) => flow.targetHeight + flow.signalHeight + 52));
+    nodes.get(id).children.forEach((child) => measure(child, row + 1));
+  }
+  measure(schema.root_id, 0);
+  const offsets = [inset];
+  gaps.forEach((gap, row) => { offsets[row + 1] = offsets[row] + nodeHeight + gap; });
   let column = 0, lastRow = 0;
   function place(id, row) {
     const children = nodes.get(id).children.map((child) => place(child, row + 1));
     const x = children.length ? (children[0] + children.at(-1)) / 2 : column++;
-    positions.set(id, { x: inset + nodeWidth / 2 + x * (nodeWidth + columnGap), y: inset + row * rowHeight });
+    positions.set(id, { x: inset + nodeWidth / 2 + x * (nodeWidth + columnGap), y: offsets[row] });
     lastRow = Math.max(lastRow, row);
     return x;
   }
   place(schema.root_id, 0);
-  return { nodes, positions, width: inset * 2 + column * (nodeWidth + columnGap) - columnGap, height: inset * 2 + nodeHeight + lastRow * rowHeight };
+  return { nodes, positions, width: inset * 2 + column * (nodeWidth + columnGap) - columnGap, height: offsets[lastRow] + nodeHeight + inset };
 }
 const inputMeasure = document.createElement("canvas").getContext("2d");
 inputMeasure.font = "12px system-ui";
@@ -68,8 +77,59 @@ function wrapInput(value) {
   if (line) lines.push(line);
   return lines;
 }
+function flowRows(schema, presentation) {
+  const displays = new Map((presentation?.nodes ?? []).map((node) => [node.node_id, node]));
+  const numbers = new Map(schema.nodes.map((node) => [node.node_id, node.number]));
+  return new Map(schema.nodes.map((node) => {
+    const display = displays.get(node.node_id);
+    // The target parameter may be produced jointly from several signals.
+    // Its exact display value belongs to the parent inputs, never to a signal.
+    const reserved = new Set(node.profile.parameter_names);
+    const signalNames = node.profile.parameter_names.map((_, index) => {
+      let name = "u" + (index + 1);
+      while (reserved.has(name)) name = "_" + name;
+      reserved.add(name);
+      return name;
+    });
+    const ports = node.bindings.map((binding) => {
+      const incoming = display?.incoming?.find((input) => input.input_index === binding.input_index);
+      const target = display?.inputs[binding.input_index];
+      const name = target?.name ?? node.profile.parameter_names[binding.input_index];
+      const signal = incoming?.signal_name ?? signalNames[binding.input_index];
+      const answer = incoming?.answer ?? null;
+      const value = incoming?.value ?? null;
+      return { source: binding.source_node, index: binding.input_index, name, signal, answer, value,
+        targetValue: target?.text ?? null,
+        targetLines: wrapInput(target?.text == null ? name : name + " = " + target.text),
+        signalLines: wrapInput("Ans(" + numbers.get(binding.source_node) + ")" + (answer == null ? "" : " = " + answer) + " → " + signal + (value == null ? "" : " = " + value)) };
+    });
+    const flows = node.children.map((child) => {
+      const rows = ports.filter((port) => port.source === child);
+      const height = (key) => rows.reduce((sum, port) => sum + port[key].length * 16 + 18, 0) - (rows.length ? 6 : 0);
+      return { child, rows, targetHeight: height("targetLines"), signalHeight: height("signalLines") };
+    });
+    return [node.node_id, flows];
+  }));
+}
+function flowLabel(port, target, x, y, kind) {
+  const final = kind === "target";
+  const lines = final ? port.targetLines : port.signalLines;
+  const height = lines.length * 16 + 12;
+  const group = svgElement("g", { class: final ? "tree-edge-target" : "tree-flow-value",
+    "data-source": port.source, "data-target": target, "data-input-index": port.index,
+    "data-parameter": port.name, "data-value": final ? port.targetValue ?? "" : port.value ?? "",
+    "data-signal-name": port.signal, "data-answer": port.answer ?? "",
+    transform: `translate(${x - nodeWidth / 2} ${y})` });
+  group.append(svgElement("rect", { width: nodeWidth, height, rx: final ? 3 : 14,
+    class: final ? "tree-target-box" : "tree-edge-label" }));
+  const text = svgElement("text", { class: final ? "tree-target-label" : "tree-input" });
+  lines.forEach((line, index) => text.append(svgElement("tspan", { x: 12, y: 20 + index * 16 }, line)));
+  group.append(text);
+  return group;
+}
 function renderTree(schema, presentation = null) {
-  const { nodes, positions, width, height } = layoutTree(schema);
+  const flowByNode = flowRows(schema, presentation);
+  const { nodes, positions, width, height } = layoutTree(schema, flowByNode);
   const filled = new Map((presentation?.nodes ?? []).map((node) => [node.node_id, node]));
   const external = [...nodes.values()].filter((node) => !node.children.length).map((node) => {
     const inputs = filled.get(node.node_id)?.inputs
@@ -118,21 +178,18 @@ function renderTree(schema, presentation = null) {
   for (const node of nodes.values()) {
     const at = positions.get(node.node_id);
     const display = filled.get(node.node_id);
-    for (const childId of node.children) {
-      const child = positions.get(childId);
-      const middle = (at.y + nodeHeight + child.y) / 2;
-      edges.append(svgElement("path", { class: "tree-edge", d: `M ${child.x} ${child.y} C ${child.x} ${middle} ${at.x} ${middle} ${at.x} ${at.y + nodeHeight + 2}`, "marker-end": "url(#composite-tree-arrow)" }));
-      const incoming = display?.incoming?.filter((input) => input.source_node === childId) ?? [];
-      if (incoming.some((input) => input.value !== null)) {
-        const value = incoming.map((input) => input.value).join(", ");
-        const x = child.x * .82 + at.x * .18;
-        const labelWidth = Math.min(nodeWidth, Math.max(42, value.length * 7 + 22));
-        const label = svgElement("g", { transform: `translate(${x} ${middle + 10})`, class: "tree-flow-value", "data-source": childId, "data-target": node.node_id });
-        label.append(svgElement("rect", { x: -labelWidth / 2, y: -13, width: labelWidth, height: 26, rx: 13, class: "tree-edge-label" }));
-        const text = svgElement("text", { "text-anchor": "middle", y: 4, class: "tree-input" }, value);
-        if (value.length > 20) { text.setAttribute("textLength", labelWidth - 18); text.setAttribute("lengthAdjust", "spacingAndGlyphs"); }
-        label.append(text);
-        labels.append(label);
+    for (const flow of flowByNode.get(node.node_id)) {
+      const child = positions.get(flow.child);
+      const targetY = at.y + nodeHeight + 18;
+      const bend = at.y + nodeHeight + 8;
+      edges.append(svgElement("path", { class: "tree-edge", d: `M ${child.x} ${child.y} L ${child.x} ${targetY} C ${child.x} ${bend} ${at.x} ${bend} ${at.x} ${at.y + nodeHeight + 2}`, "marker-end": "url(#composite-tree-arrow)" }));
+      let targetOffset = targetY;
+      let signalOffset = child.y - 18 - flow.signalHeight;
+      for (const port of flow.rows) {
+        labels.append(flowLabel(port, node.node_id, child.x, targetOffset, "target"));
+        labels.append(flowLabel(port, node.node_id, child.x, signalOffset, "signal"));
+        targetOffset += port.targetLines.length * 16 + 18;
+        signalOffset += port.signalLines.length * 16 + 18;
       }
     }
     const root = node.node_id === schema.root_id;
@@ -153,6 +210,7 @@ function renderTree(schema, presentation = null) {
 function renderPresentation(presentation) {
   const token = ++presentationRevision;
   const pending = [];
+  const numbers = new Map(presentation.nodes.map((node) => [node.node_id, node.number]));
   const cards = presentation.nodes.map((node) => {
     const card = element("article", "subproblem-card subproblem-" + node.kind);
     card.dataset.node = node.node_id;
@@ -162,22 +220,25 @@ function renderPresentation(presentation) {
     header.append(element("h3", "", "Задача " + node.number));
     const source = origin(node.source_id);
     header.append(element("span", "subproblem-origin", source.subject + " · " + source.detail));
-    if (node.answer != null) {
-      const answer = element("div", "subproblem-answer");
-      answer.append(element("span", "", "Ответ"), element("strong", "", node.answer));
-      header.append(answer);
-    }
+    const answer = element("div", "subproblem-answer");
+    answer.append(element("span", "", "Ответ"), element("strong", "", node.answer ?? "—"));
+    header.append(answer);
     card.append(header);
     const incoming = node.incoming ?? [];
     if (incoming.length) {
       const flow = element("div", "subproblem-flow");
       for (const input of incoming) {
         const line = element("span", "flow-item");
-        line.append(element("span", "flow-source", "№ " + input.source_label.replace(/^R/, "")));
-        if (input.answer != null) line.append(element("span", "flow-answer", input.answer));
+        line.dataset.source = input.source_node;
+        line.dataset.inputIndex = input.input_index;
+        line.append(element("span", "flow-source", "Ans(" + numbers.get(input.source_node) + ")"));
+        if (input.answer != null) line.append(element("span", "flow-answer", "= " + input.answer));
         line.append(element("span", "flow-arrow", "→"));
-        if (input.value != null) line.append(element("span", "flow-input-name", "u" + (input.input_index + 1) + " ="));
-        line.append(element("span", "parameter-slot slot-internal" + (input.value != null ? " slot-filled" : ""), input.value ?? "u" + (input.input_index + 1)));
+        const signal = input.signal_name ?? "u" + (input.input_index + 1);
+        line.append(element("span", "parameter-slot slot-internal" + (input.value != null ? " slot-filled" : ""), signal + (input.value == null ? "" : " = " + input.value)));
+        line.append(element("span", "flow-arrow", "→"));
+        const target = node.inputs[input.input_index];
+        line.append(element("span", "flow-target", target.name + (target.text == null ? "" : " = " + target.text)));
         flow.append(line);
       }
       card.append(flow);
@@ -196,15 +257,14 @@ function renderPresentation(presentation) {
     const statement = element("div", "subproblem-statement");
     pending.push(MathPresentation.render(statement, node.segments));
     card.append(statement);
-    if (node.adapter_math?.length || node.notes.length || node.adapter) {
+    if (node.adapter_math?.length || node.question_notes?.length) {
       const rules = element("div", "conversion-rules");
       for (const rule of node.adapter_math ?? []) {
         const line = element("div", "conversion-rule");
         pending.push(MathPresentation.render(line, [{ kind: "text", text: "$" + rule + "$" }]));
         rules.append(line);
       }
-      if (node.adapter && !node.adapter_math?.length) rules.append(element("p", "conversion-note", node.adapter));
-      for (const note of node.notes) {
+      for (const note of node.question_notes ?? []) {
         const paragraph = element("p", "conversion-note");
         pending.push(MathPresentation.render(paragraph, [{ kind: "text", text: note }]));
         rules.append(paragraph);
@@ -229,11 +289,11 @@ function resetParameters() {
   byId("download").textContent = "Скачать шаблон";
   presentationRevision++;
   byId("mode").textContent = "Шаблон";
-  byId("instance-result").hidden = true;
-  byId("root-answer").textContent = "";
+  byId("instance-result").hidden = !currentSchema;
+  byId("root-answer").textContent = "—";
   byId("reset-parameters").disabled = true;
   byId("current-copy-status").textContent = "";
-  if (currentSchema) renderTree(currentSchema.data);
+  if (currentSchema) renderTree(currentSchema.data, templatePresentation);
   if (templatePresentation) renderPresentation(templatePresentation);
   else if (currentSchema) {
     const target = byId("public-template");
@@ -251,7 +311,7 @@ async function showSchema(schema) {
   const data = schema.data;
   byId("schema-results").hidden = false;
   byId("parameter-hint").hidden = true;
-  byId("schema-meta").textContent = data.nodes.length + " задач · " + data.depth + " уровня";
+  byId("schema-meta").textContent = data.nodes.length + " задач · " + data.depth + " уровня · ширина основания: " + data.actual_width;
   const reduced = data.actual_width < data.requested_width;
   byId("width-notice").textContent = reduced ? `Запрошена ширина ${formatNumber.format(data.requested_width)}, доступно ${formatNumber.format(data.actual_width)}. Предел демо — 128 задач в основании.` : "";
   byId("width-notice").hidden = !reduced;
@@ -268,6 +328,7 @@ async function showSchema(schema) {
   viewport.scrollTop = 0;
   try {
     templatePresentation = (await postJSON("presentation", '{"schema":' + schema.raw + ',"seed":null}')).data;
+    renderTree(data, templatePresentation);
     renderPresentation(templatePresentation);
   } catch {
     byId("presentation-note").textContent = "Оформление недоступно. Показан исходный текст.";

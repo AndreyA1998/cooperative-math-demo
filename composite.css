@@ -10,7 +10,7 @@
 .tree-card .section-heading > .metadata { margin-left: auto; }
 .root-result { display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px; margin-left: 15px; color: var(--accent); }
 .root-result > span { font-size: .76rem; }
-.root-result strong { max-width: 100%; font: 600 1.05rem ui-monospace, monospace; overflow-wrap: anywhere; }
+.root-result strong { max-width: 100%; font: 600 1.4rem ui-monospace, monospace; overflow-wrap: anywhere; }
 .tree-viewport { overflow: auto; max-height: 590px; margin-top: 19px; border: 1px solid #edf0ee; border-radius: 12px; background: radial-gradient(#dce6df .7px, transparent .7px) #fafcfb; background-size: 18px 18px; }
 .tree-viewport svg { display: block; min-width: 100%; }
 .tree-node { fill: #fff; stroke: #d4dfd8; stroke-width: 1.2; filter: drop-shadow(0 2px 2px #28433205); }
@@ -23,7 +23,10 @@
 .tree-edge { fill: none; stroke: #aabfb1; stroke-width: 1.4; }
 .tree-arrow { fill: #91aa9a; }
 .tree-edge-label { fill: #fffaf0; stroke: #e8d9b9; }
-.tree-input { fill: #8c6226; font: 12px ui-monospace, monospace; }
+.tree-input { fill: #8c6226; font: 12px system-ui, sans-serif; }
+.tree-target-box { fill: #f6f8f7; stroke: #bfcec4; }
+.tree-target-label { fill: #395b48; font: 12px system-ui, sans-serif; }
+.flow-target { border: 1px solid #bfcec4; border-radius: 3px; padding: 1px 5px; color: #395b48; background: #f6f8f7; overflow-wrap: anywhere; min-width: 0; }
 .tasks-section { margin-top: 30px; }
 .tasks-section > .section-heading { padding-inline: 3px; }
 .tasks-section > .section-heading button { min-height: 34px; font-size: .77rem; padding: 7px 11px; }
@@ -34,7 +37,7 @@
 .task-number { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 8px; background: #f0f5f1; color: #527260; font-size: .8rem; font-weight: 600; flex-shrink: 0; }
 .subproblem-heading h3 { font-size: .86rem; font-weight: 550; margin: 0; color: #62776a; }
 .subproblem-answer { display: flex; gap: 11px; align-items: baseline; margin-left: auto; max-width: 65%; font-size: .74rem; color: #7e8a82; }
-.subproblem-answer strong { color: #277158; font: 550 1rem/1.5 ui-monospace, monospace; overflow-wrap: anywhere; min-width: 0; }
+.subproblem-answer strong { color: #277158; font: 600 1.3rem/1.5 ui-monospace, monospace; overflow-wrap: anywhere; min-width: 0; }
 .subproblem-inputs { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 16px; margin-top: 20px; font-size: .95rem; }
 .input-chip { display: inline-flex; align-items: baseline; gap: 3px; max-width: 100%; min-width: 0; }
 .input-name { color: #7b897f; font: .76rem ui-monospace, monospace; overflow-wrap: anywhere; }

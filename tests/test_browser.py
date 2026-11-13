@@ -43,6 +43,29 @@ class BrowserRuntimeTests(unittest.TestCase):
             self.assertFalse(any(method == "POST" or "/api/" in path for method, path in server.requests),
                              "The browser tried to use an HTTP generator backend")
 
+    def test_default_page_is_empty_and_seeds_are_opt_in(self):
+        self.run_case(r'''
+          await until(idleAtomic, "catalogue ready");
+          check($("atomic-problem-card").hidden && $("atomic-problem-id").value === "", "Default page selected a task");
+          check($("atomic-generate").disabled, "Unselected task can be filled");
+          for (const prefix of ["atomic", "composite-structure", "composite-parameter"]) {
+            check(!$(prefix + "-seed-mode").checked && $(prefix + "-seed-setting").hidden, "Seed mode enabled by default: " + prefix);
+          }
+          $("composite-tab").click();
+          check($("composite-schema-results").hidden, "Default page generated a composite tree");
+          $("atomic-tab").click();
+          check($("atomic-problem-card").hidden, "Switching tabs generated a task");
+          $("atomic-generate-random").click();
+          await until(idleAtomic, "explicit random selection");
+          check(!$("atomic-problem-card").hidden && $("atomic-problem-id").value, "Explicit random selection did not load a task");
+          check($("atomic-problem-title").textContent === "Задача", "Source number leaked into title");
+          check($("atomic-answer-value").textContent === "—", "Selection filled numbers automatically");
+          const text = $("atomic-problem-text").textContent;
+          $("composite-tab").click(); $("atomic-tab").click();
+          check($("atomic-problem-text").textContent === text, "Tab switch discarded selected template");
+          return "OK: empty initial state, explicit selection, seeds opt-in";
+        ''')
+
     def test_actual_wasm_matches_native_and_preserves_raw_large_schema_integers(self):
         structure = {"depth": 3, "width": 4, "seed": "42", "split": "train",
                      "allow_template_reuse": False}
@@ -264,12 +287,12 @@ class BrowserRuntimeTests(unittest.TestCase):
           check(!$("composite-instance-result").hidden, "Tab switch discarded a composite variant");
           check($("composite-root-answer").getBoundingClientRect().height > 0, "Answer is not visible");
           reset.click();
-          check($("composite-instance-result").hidden, "Reset kept a stale variant");
+          check(!$("composite-instance-result").hidden && $("composite-root-answer").textContent === "—", "Reset must show the bare answer dash");
           check(!$("composite-download").hidden && $("composite-download").textContent === "Скачать шаблон", "Reset failed to restore template download");
           $("composite-download").click();
           check(await exported.text() === expected.modelTemplate, "Reset download did not restore the symbolic template");
           externalInputs(false);
-          check(!$("composite-root-answer").textContent && !template.querySelector(".subproblem-answer, .slot-filled"), "Reset retained answer or values");
+          check($("composite-root-answer").textContent === "—" && !template.querySelector(".slot-filled") && [...template.querySelectorAll(".subproblem-answer strong")].every(answer => answer.textContent === "—"), "Reset retained answer or values");
           await until(() => [...template.querySelectorAll(".math-fragment")].every(node => node.hasAttribute("data-rendered")) || !$("composite-presentation-note").hidden, "reset typesetting", {timeout: 20000});
           check(template.textContent === templateBefore && $("composite-tree").innerHTML === treeBefore,
                 "Reset changed the schema or placeholders");
@@ -291,7 +314,7 @@ class BrowserRuntimeTests(unittest.TestCase):
           reset.click();
           pending.splice(0).forEach(resolve => resolve(false));
           await new Promise(resolve => setTimeout(resolve, 50));
-          check($("composite-instance-result").hidden && !template.querySelector(".subproblem-answer, .slot-filled"), "Late rendering restored discarded state after reset");
+          check($("composite-root-answer").textContent === "—" && !template.querySelector(".slot-filled") && [...template.querySelectorAll(".subproblem-answer strong")].every(answer => answer.textContent === "—"), "Late rendering restored discarded state after reset");
           MathPresentation.render = originalRender;
           $("composite-depth").value = "1";
           $("composite-width").value = "300";
@@ -302,6 +325,7 @@ class BrowserRuntimeTests(unittest.TestCase):
           check(!notice.hidden && /\b300\b/.test(notice.textContent) && /\b1\b/.test(notice.textContent)
             && /\b128\b/.test(notice.textContent), "Reduced width notice omits requested, actual or technical limit");
           check(!$("composite-parameter-controls").disabled, "Reduced schema cannot generate variants");
+          check($("composite-schema-meta").textContent.includes("ширина основания: 1"), "Summary reports requested rather than applied width");
           $("composite-width").value = "1";
           $("composite-structure-random").click();
           await until(idleComposite, "exact width rebuild");

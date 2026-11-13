@@ -38,6 +38,11 @@ def arithmetic(source, environment):
                 # Explicit Euclidean remainder; no native adapter helper.
                 return left - (left // right) * right
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            if node.func.id == 'Ans':
+                if (len(node.args) != 1 or node.keywords or not isinstance(node.args[0], ast.Constant)
+                        or type(node.args[0].value) is not int or node.args[0].value < 1):
+                    raise AssertionError('Ans requires a literal positive task number')
+                return Fraction(environment['R' + str(node.args[0].value)])
             args = [visit(argument) for argument in node.args]
             if node.func.id == 'floor' and len(args) == 1:
                 return Fraction(args[0].numerator // args[0].denominator)
@@ -52,10 +57,10 @@ def plain_value(expression, environment):
         return arithmetic(expression, environment)
     first, condition = expression.split(' if ', 1)
     condition, second = condition.split('; otherwise ', 1)
-    annotation = re.search(r' \((R\d+)=n/d reduced, d>0; mod is nonnegative\)$', second)
+    annotation = re.search(r' \((R\d+|Ans\(\d+\))=n/d reduced, d>0; mod is nonnegative\)$', second)
     local = dict(environment)
     if annotation:
-        q = Fraction(local[annotation[1]])
+        q = arithmetic(annotation[1], local)
         local.update(n=q.numerator, d=q.denominator)
         second = second[:annotation.start()]
     left, right = condition.split(' < ', 1)
@@ -66,6 +71,7 @@ def plain_value(expression, environment):
 
 
 def tex_arithmetic(source):
+    source = re.sub(r'\\operatorname\{Ans\}\((\d+)\)', lambda m: r'\text{выход №' + m[1] + '}', source)
     source = re.sub(r'\\text\{числитель\}\\left\(\\text\{выход №(\d+)\}\\right\)', r'n\1', source)
     source = re.sub(r'\\text\{знаменатель\}\\left\(\\text\{выход №(\d+)\}\\right\)', r'd\1', source)
     source = re.sub(r'\\text\{выход №(\d+)\}', r'R\1', source)
@@ -164,14 +170,22 @@ def pretty_rules(rules, answers, parameter_types):
 
 class AdapterConsistencyTests(unittest.TestCase):
     def assert_representations(self, op, answers):
-        plain = describe_adapter(op, 'R37')
         pretty, _ = _operator_math(op, 'R37')
-        for answer in answers:
-            with self.subTest(operator=op, answer=answer):
-                expected = evaluate_adapter(op, answer)
-                expected = Fraction(expected) if isinstance(expected, (int, str)) else expected
-                self.assertEqual(plain_value(plain, {'R37': answer}), expected)
-                self.assertEqual(pretty_value(pretty, {'R37': answer}), expected)
+        for reference in ('R37', 'Ans(37)'):
+            plain = describe_adapter(op, reference)
+            for answer in answers:
+                with self.subTest(operator=op, answer=answer, reference=reference):
+                    expected = evaluate_adapter(op, answer)
+                    expected = Fraction(expected) if isinstance(expected, (int, str)) else expected
+                    self.assertEqual(plain_value(plain, {'R37': answer}), expected)
+                    self.assertEqual(pretty_value(pretty, {'R37': answer}), expected)
+
+    def test_ans_notation_means_only_the_named_task_output(self):
+        self.assertEqual(arithmetic('Ans(5)', {'R5': '7/3'}), Fraction(7, 3))
+        self.assertEqual(pretty_value(r'\operatorname{Ans}(5)', {'R5': '7/3'}), Fraction(7, 3))
+        for expression in ('Ans(0)', 'Ans(-1)', 'Ans(R5)', 'Ans(2+3)', 'Ans(5, 6)'):
+            with self.subTest(expression=expression), self.assertRaises(AssertionError):
+                arithmetic(expression, {'R5': '7/3'})
 
     def test_identity_and_affine_exact_rational_and_large_values(self):
         for values, result_type in (([-1, 1], 'int'), (['-3/2', '7/4'], 'rational_string')):
@@ -280,7 +294,8 @@ class AdapterConsistencyTests(unittest.TestCase):
                         # Every upper rule and condition stays symbolic across
                         # filled variants. Only bottom conditions are instantiated.
                         self.assertEqual(section, originals[node['number']])
-                        plain = _render_inputs(node, by_id)
+                        plain = (_render_inputs(node, by_id, text_version=schema['text_version'])
+                                 if 'text_version' in schema else _render_inputs(node, by_id))
                         pretty, _ = _adapter_math(node, by_id)
                         self.assertIn(plain, section)
                         answers = {by_id[binding['source_node']]['label']: trace[binding['source_node']]['answer']
@@ -299,7 +314,7 @@ class AdapterConsistencyTests(unittest.TestCase):
 
 
 def split_subproblems(text):
-    parts = re.split(r'\nSubproblem (\d+) \(R\d+\)\n\n', text)
+    parts = re.split(r'\nSubproblem (\d+) \((?:R\d+|Ans\(\d+\)|Task\(\d+\))\)\n\n', text)
     result = {int(parts[i]): parts[i+1].rstrip() for i in range(1, len(parts), 2)}
     last = max(result)
     result[last] = result[last].split('\n\n\nReturn only ', 1)[0].rstrip()

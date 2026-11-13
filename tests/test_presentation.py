@@ -77,7 +77,7 @@ class PresentationTests(unittest.TestCase):
     def test_threshold_rendering_uses_actual_less_bit(self):
         op = {'kind': 'select', 'classifier': {'kind': 'threshold', 'cut': '3/2', 'less_bit': 1}, 'target_domain': {'values': [0, 1]}}
         text, notes = _operator_math(op, 'R12')
-        self.assertIn(r'\begin{cases}1 & \text{выход №12}<\frac{3}{2}', text)
+        self.assertIn(r'\begin{cases}1 & \operatorname{Ans}(12)<\frac{3}{2}', text)
         self.assertIn(r'\\0 &', text)
         self.assertEqual(notes, [])
 
@@ -98,7 +98,7 @@ class DisplayedOperatorReviewTests(unittest.TestCase):
             'source_domain': {'kind': 'finite', 'values': ['0', '1']},
             'target_domain': {'kind': 'finite', 'values': [0, 1]},
         }
-        self.assertEqual(_operator_math(identity, 'R27'), (r'\text{выход №27}', []))
+        self.assertEqual(_operator_math(identity, 'R27'), (r'\operatorname{Ans}(27)', []))
         wide = 9007199254740993
         affine = {
             'kind': 'affine', 'result_type': 'int',
@@ -107,7 +107,7 @@ class DisplayedOperatorReviewTests(unittest.TestCase):
             'scale': '-1/3', 'offset': str(Fraction(wide + 3, 3)),
         }
         tex, notes = _operator_math(affine, 'R27')
-        coefficients = re.fullmatch(r'(.*?)\\text\{выход №27\}\+(.*)', tex)
+        coefficients = re.fullmatch(r'(.*?)\\operatorname\{Ans\}\(27\)\+(.*)', tex)
         self.assertIsNotNone(coefficients)
         scale, offset = map(scalar, coefficients.groups())
         for answer, expected in ((wide, 1), (wide + 3, 0)):
@@ -124,7 +124,7 @@ class DisplayedOperatorReviewTests(unittest.TestCase):
                 'classifier': {'kind': 'threshold', 'cut': str(cut), 'less_bit': less_bit},
             }
             tex, _ = _operator_math(op, 'R9')
-            branches = re.fullmatch(r'\\begin\{cases\}(.*?) & \\text\{выход №9\}<(.*?)\\\\(.*?) & \\text\{otherwise\}\\end\{cases\}', tex)
+            branches = re.fullmatch(r'\\begin\{cases\}(.*?) & \\operatorname\{Ans\}\(9\)<(.*?)\\\\(.*?) & \\text\{otherwise\}\\end\{cases\}', tex)
             self.assertIsNotNone(branches)
             less, boundary, other = map(scalar, branches.groups())
             self.assertEqual(boundary, cut)
@@ -139,8 +139,8 @@ class DisplayedOperatorReviewTests(unittest.TestCase):
               'target_domain': {'kind': 'finite', 'values': [0, 1]},
               'classifier': {'kind': 'floor_mod', 'spec': spec}}
         tex, notes = _operator_math(op, 'R4')
-        parsed_tex = tex.replace(r'\text{числитель}\left(\text{выход №4}\right)', 'N_{4}').replace(
-            r'\text{знаменатель}\left(\text{выход №4}\right)', 'D_{4}')
+        parsed_tex = tex.replace(r'\text{числитель}\left(\operatorname{Ans}(4)\right)', 'N_{4}').replace(
+            r'\text{знаменатель}\left(\operatorname{Ans}(4)\right)', 'D_{4}')
         coefficients = re.search(r'(-?\d+)N_\{4\}\+(-?\d+)D_\{4\}\}\{(\d+)\}\\right\\rfloor,(\d+)\\right\)<(\d+)', parsed_tex)
         self.assertIsNotNone(coefficients)
         a, b, divisor, modulus, threshold = map(int, coefficients.groups())
@@ -167,7 +167,7 @@ class DisplayedOperatorReviewTests(unittest.TestCase):
                 'adapter': {'groups': [[0, 2], [1]]},
                 'bindings': [{'input_index': i, 'source_node': str(i), 'operator': {'kind': 'identity'}} for i in range(3)]}
         rules, notes = _adapter_math(node, {str(i): {'label': 'R' + str(i + 1)} for i in range(3)})
-        self.assertEqual(rules[:3], [r'\text{\_u1} = \text{выход №1}', r'\text{u2} = \text{выход №2}', r'\text{u3} = \text{выход №3}'])
+        self.assertEqual(rules[:3], [r'\text{\_u1} = \operatorname{Ans}(1)', r'\text{u2} = \operatorname{Ans}(2)', r'\text{u3} = \operatorname{Ans}(3)'])
         self.assertIn(r'\text{\_b1}=\left(\text{\_u1}+\text{u3}\right)\bmod 2', rules)
         self.assertIn(str(wide), rules[4])
         self.assertIn(str(wide + 2), rules[4])

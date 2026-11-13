@@ -54,6 +54,7 @@ function updateURL(state) {
 }
 function renderTask(state) {
   const token = ++revision;
+  byId("problem-card").hidden = false;
   const variant = state.variant;
   const content = variant ?? state.template;
   const presentation = content.presentation;
@@ -61,7 +62,7 @@ function renderTask(state) {
   byId("placeholder").hidden = true;
   text.hidden = false;
   byId("mode").textContent = variant ? "Задача" : "Шаблон";
-  byId("problem-title").textContent = "Задача № " + taskNumber(activeId);
+  byId("problem-title").textContent = "Задача";
   byId("answer-value").textContent = variant?.answer ?? "—";
   byId("reset").disabled = !variant;
   byId("download").hidden = false;
@@ -99,6 +100,9 @@ async function selectTask() {
   remember();
   activeId = idSelect.value;
   if (!activeId) return;
+  idSelect.querySelector('option[value=""]')?.remove();
+  byId("problem-card").hidden = false;
+  byId("generate").disabled = false;
   groups.set(activeGroup, activeId);
   let state = tasks.get(activeId);
   if (state) { renderTask(state); showStatus(""); return; }
@@ -108,7 +112,7 @@ async function selectTask() {
   byId("params").hidden = true;
   byId("placeholder").hidden = false;
   byId("placeholder").textContent = "Загружаем шаблон…";
-  byId("problem-title").textContent = "Задача № " + taskNumber(id);
+  byId("problem-title").textContent = "Задача";
   byId("mode").textContent = "Шаблон";
   byId("answer-value").textContent = "—";
   byId("reset").disabled = true;
@@ -174,9 +178,21 @@ async function init() {
     const requested = catalogue.find(({ id }) => id === requestedId);
     subjectSelect.value = requested?.subject ?? (subjects.includes("prealgebra") ? "prealgebra" : subjects[0]);
     splitSelect.value = requested?.split ?? "test";
-    filterCatalogue(requested?.id ?? "prealgebra/test/11");
+    filterCatalogue(requested?.id);
     catalogueControls.disabled = false;
-    await selectTask();
+    setSeedMode(false);
+    if (requested) {
+      await selectTask();
+    } else {
+      const empty = new Option("Выберите задачу", "", true, true);
+      empty.disabled = true;
+      idSelect.prepend(empty);
+      idSelect.value = "";
+      byId("generate").disabled = true;
+      byId("copy").disabled = true;
+      byId("problem-card").hidden = true;
+    }
+    showStatus("");
     if (requested && query.has("seed")) {
       setSeedMode(true);
       seedInput.value = query.get("seed");
@@ -192,6 +208,7 @@ idSelect.addEventListener("change", () => { void selectTask(); });
 byId("generator").addEventListener("submit", (event) => { event.preventDefault(); void generateVariant(seedMode.checked ? seedInput.value : undefined); });
 byId("generate-random").addEventListener("click", async () => {
   remember();
+  idSelect.querySelector('option[value=""]')?.remove();
   idSelect.selectedIndex = Math.floor(Math.random() * idSelect.options.length);
   await selectTask();
   const state = tasks.get(activeId);
