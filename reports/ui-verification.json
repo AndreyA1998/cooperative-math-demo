@@ -123,7 +123,7 @@
     }
   ],
   "dependencies": "No framework, local environment or package cache installed; existing worker/RPC/transport preserved.",
-  "source_commit": "5a446c461ed33560d06ce17b80d39832d0873d8a",
+  "source_commit": "8b8e3e464732a17563235a21cf4336c9fa5bd9da",
   "runtime_sha256": "843a3c9f803b84d6db09db0fa0d66b99e98c1b9ddbc23b187973fe0733c7c3ab",
   "native_bundle_suite": {
     "tests": 41,
@@ -131,5 +131,38 @@
     "errors": 0,
     "seconds": 41.161,
     "command": "PYTHONPATH=tests python3 -B -m unittest test_api test_atomic_presentation test_build test_export test_presentation -v"
+  },
+  "server_python": {
+    "source": "published runtime",
+    "commit": "4e058014f603094cfc5768a3fb5f53cc25c1002d",
+    "tests_discovered": 53,
+    "passed": 41,
+    "skipped": 12,
+    "skip_reason": "macOS WebKit unavailable on Linux",
+    "failures": 0,
+    "wall_seconds": 31.109,
+    "javascript_note": "Node not installed on server; 9 JavaScript tests passed locally and in GitHub Actions."
+  },
+  "live_pages": {
+    "url": "https://andreya1998.github.io/cooperative-math-demo/",
+    "tested_ui_commit": "4e058014f603094cfc5768a3fb5f53cc25c1002d",
+    "deployment_run": "https://github.com/AndreyA1998/cooperative-math-demo/actions/runs/43430158261",
+    "status": "success",
+    "matching_asset_files": 6,
+    "manual_browser": "Safari",
+    "atomic_id": "prealgebra/test/11",
+    "atomic_seed": "42",
+    "atomic_answer": "32/7",
+    "composite_shape": [
+      3,
+      4
+    ],
+    "structure_seed": "42",
+    "parameter_seed": "7",
+    "composite_answer": "35",
+    "filled_slots": 31,
+    "atomic_reset": true,
+    "composite_reset": true,
+    "tabs_preserve_state": true
   }
 }
