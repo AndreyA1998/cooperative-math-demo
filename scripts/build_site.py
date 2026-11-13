@@ -9,7 +9,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 ASSETS = ('index.html', 'styles.css', 'composite.css', 'app.js', 'composite.js',
-          'main.js', 'math-renderer.js', 'rpc.js', 'transport.js', 'worker.js',
+          'main.js', 'math-renderer.js', 'view-state.js', 'rpc.js', 'transport.js', 'worker.js',
           'runtime.json', 'runtime.zip', 'THIRD_PARTY.md')
 
 
@@ -31,7 +31,7 @@ def verify_runtime(source):
         for name in names:
             if sha256(package.read(name)).hexdigest() != hashes[name]:
                 raise ValueError('Runtime file differs from its manifest: ' + name)
-        for name in ('__init__.py', 'api.py', 'presentation.py'):
+        for name in ('__init__.py', 'api.py', 'presentation.py', 'expression_patterns.py', 'source_bindings.py'):
             bundled = 'math_demo/' + name
             current = source / 'python' / bundled
             if (bundled not in hashes or not current.is_file()

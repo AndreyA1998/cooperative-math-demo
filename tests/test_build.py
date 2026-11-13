@@ -29,7 +29,7 @@ class BuildTests(unittest.TestCase):
         files = {name: b'# packaged fixture\n' for name in (
             'source_dataset/__init__.py', 'template_dataset/__init__.py',
             'composite_dataset/__init__.py', 'math_demo/__init__.py',
-            'math_demo/api.py', 'math_demo/presentation.py')}
+            'math_demo/api.py', 'math_demo/presentation.py', 'math_demo/expression_patterns.py', 'math_demo/source_bindings.py')}
         with zipfile.ZipFile(root / 'runtime.zip', 'w') as archive:
             for name, contents in files.items():
                 archive.writestr(name, contents)
@@ -107,7 +107,7 @@ class Origins(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder) / 'source'
             self.runtime_fixture(root)
-            for name in ('__init__.py', 'api.py', 'presentation.py'):
+            for name in ('__init__.py', 'api.py', 'presentation.py', 'expression_patterns.py', 'source_bindings.py'):
                 source = root / 'python/math_demo' / name
                 original = source.read_bytes()
                 source.write_text('# changed since export\n')

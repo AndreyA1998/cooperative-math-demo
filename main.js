@@ -1,3 +1,4 @@
+import { resetViewState } from "./view-state.js";
 import "./app.js";
 import "./composite.js";
 
@@ -12,6 +13,7 @@ function selectView(view, { updateURL = false, focus = false } = {}) {
     if (selected && focus) tab.focus({ preventScroll: true });
   }
   document.title = (view === "composite" ? "Дерево задач" : "Задача") + " — Cooperative Math";
+  window.dispatchEvent(new CustomEvent("math-view-change", { detail: view }));
   if (updateURL) {
     const url = new URL(window.location.href);
     url.hash = view;
@@ -40,3 +42,12 @@ for (const [index, tab] of tabs.entries()) {
 window.addEventListener("hashchange", () => selectView(viewFromURL()));
 window.addEventListener("popstate", () => selectView(viewFromURL()));
 selectView(viewFromURL());
+
+const brand = document.querySelector(".brand");
+brand.addEventListener("click", async (event) => {
+  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  brand.setAttribute("aria-busy", "true");
+  try { await resetViewState(); }
+  finally { window.location.replace(new URL("./", window.location.href)); }
+});

@@ -139,8 +139,8 @@ class DisplayedOperatorReviewTests(unittest.TestCase):
               'target_domain': {'kind': 'finite', 'values': [0, 1]},
               'classifier': {'kind': 'floor_mod', 'spec': spec}}
         tex, notes = _operator_math(op, 'R4')
-        parsed_tex = tex.replace(r'\text{числитель}\left(\operatorname{Ans}(4)\right)', 'N_{4}').replace(
-            r'\text{знаменатель}\left(\operatorname{Ans}(4)\right)', 'D_{4}')
+        parsed_tex = tex.replace(r'\operatorname{numerator}\left(\operatorname{Ans}(4)\right)', 'N_{4}').replace(
+            r'\operatorname{denominator}\left(\operatorname{Ans}(4)\right)', 'D_{4}')
         coefficients = re.search(r'(-?\d+)N_\{4\}\+(-?\d+)D_\{4\}\}\{(\d+)\}\\right\\rfloor,(\d+)\\right\)<(\d+)', parsed_tex)
         self.assertIsNotNone(coefficients)
         a, b, divisor, modulus, threshold = map(int, coefficients.groups())

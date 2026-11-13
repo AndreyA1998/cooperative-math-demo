@@ -1,16 +1,31 @@
 import { request } from "./transport.js";
 import { MathPresentation } from "./math-renderer.js";
+import { readViewState, saveViewState } from "./view-state.js";
 
 const byId = (id) => document.getElementById("composite-" + id);
 const tree = byId("tree");
 const structureControls = byId("structure-controls");
 const parameterControls = byId("parameter-controls");
 const formatNumber = new Intl.NumberFormat("ru");
+const pluralRules = new Intl.PluralRules("ru");
+function quantity(value, one, few, many) {
+  return formatNumber.format(value) + " " + ({ one, few, many }[pluralRules.select(value)] ?? many);
+}
 let currentSchema;
 let currentInstance;
 let currentVariantRaw;
 let templatePresentation;
 let presentationRevision = 0;
+let pendingTreeCenter = false;
+let restoring = false;
+function persistTree() {
+  if (!currentSchema || restoring) return;
+  const controls = {};
+  for (const id of ["depth", "width", "split", "structure-seed", "parameter-seed"]) controls[id] = byId(id).value;
+  for (const id of ["reuse", "structure-seed-mode", "parameter-seed-mode"]) controls[id] = byId(id).checked;
+  void saveViewState("composite", { schema: currentSchema.raw,
+    parameterSeed: currentInstance?.parameter_seed ?? null, controls });
+}
 function showStatus(message, error = false) {
   byId("status").textContent = message;
   byId("status").classList.toggle("error", error);
@@ -282,7 +297,7 @@ function renderPresentation(presentation) {
     byId("presentation-note").hidden = results.every(Boolean);
   });
 }
-function resetParameters() {
+function resetParameters(persist = true) {
   currentInstance = undefined;
   currentVariantRaw = undefined;
   byId("download").hidden = !currentSchema;
@@ -302,16 +317,33 @@ function resetParameters() {
     byId("presentation-note").textContent = "Показан исходный шаблон.";
     byId("presentation-note").hidden = false;
   }
+  if (persist) persistTree();
 }
+function centerPendingTree() {
+  const viewport = byId("tree-viewport");
+  if (!pendingTreeCenter || !viewport.clientWidth) return;
+  const root = tree.querySelector(".tree-root").getBoundingClientRect();
+  const frame = viewport.getBoundingClientRect();
+  // An asymmetric tree's root need not lie at the center of the full canvas.
+  viewport.scrollLeft += root.left + root.width / 2
+    - frame.left - viewport.clientLeft - viewport.clientWidth / 2;
+  viewport.scrollTop = 0;
+  pendingTreeCenter = false;
+}
+window.addEventListener("math-view-change", (event) => {
+  if (event.detail === "composite") centerPendingTree();
+});
 async function showSchema(schema) {
   currentSchema = schema;
   templatePresentation = null;
-  resetParameters();
+  resetParameters(false);
   byId("presentation-note").hidden = true;
   const data = schema.data;
   byId("schema-results").hidden = false;
   byId("parameter-hint").hidden = true;
-  byId("schema-meta").textContent = data.nodes.length + " задач · " + data.depth + " уровня · ширина основания: " + data.actual_width;
+  byId("schema-meta").textContent = [quantity(data.nodes.length, "задача", "задачи", "задач"),
+    quantity(data.depth, "уровень", "уровня", "уровней"),
+    quantity(data.actual_width, "агент", "агента", "агентов")].join(" · ");
   const reduced = data.actual_width < data.requested_width;
   byId("width-notice").textContent = reduced ? `Запрошена ширина ${formatNumber.format(data.requested_width)}, доступно ${formatNumber.format(data.actual_width)}. Предел демо — 128 задач в основании.` : "";
   byId("width-notice").hidden = !reduced;
@@ -319,13 +351,9 @@ async function showSchema(schema) {
   const target = byId("public-template");
   target.classList.remove("formatted-presentation");
   target.textContent = data.problem_template;
-  const viewport = byId("tree-viewport");
-  const root = tree.querySelector(".tree-root").getBoundingClientRect();
-  const frame = viewport.getBoundingClientRect();
-  // An asymmetric tree's root need not lie at the center of the full canvas.
-  viewport.scrollLeft += root.left + root.width / 2
-    - frame.left - viewport.clientLeft - viewport.clientWidth / 2;
-  viewport.scrollTop = 0;
+  // A hidden tab has no geometry; center its new tree once when revealed.
+  pendingTreeCenter = true;
+  centerPendingTree();
   try {
     templatePresentation = (await postJSON("presentation", '{"schema":' + schema.raw + ',"seed":null}')).data;
     renderTree(data, templatePresentation);
@@ -334,6 +362,7 @@ async function showSchema(schema) {
     byId("presentation-note").textContent = "Оформление недоступно. Показан исходный текст.";
     byId("presentation-note").hidden = false;
   }
+  persistTree();
 }
 function showInstance(instance, presentation, raw) {
   currentInstance = instance;
@@ -347,6 +376,7 @@ function showInstance(instance, presentation, raw) {
   byId("current-copy-status").textContent = "";
   renderTree(currentSchema.data, presentation);
   renderPresentation(presentation);
+  persistTree();
 }
 async function submit(action, body, success, message) {
   structureControls.disabled = true;
@@ -382,7 +412,7 @@ byId("parameter-form").addEventListener("submit", (event) => {
   const body = '{"schema":' + currentSchema.raw + ',"seed":' + JSON.stringify(seedForSubmission(parameterSeed)) + '}';
   void submit("variant", body, ({ data, raw }) => showInstance(data.instance, data.presentation, raw), "Вычисляем…");
 });
-byId("reset-parameters").addEventListener("click", resetParameters);
+byId("reset-parameters").addEventListener("click", () => resetParameters());
 async function copyText(button, text) {
   let copied = false;
   try {
@@ -418,3 +448,39 @@ byId("download").addEventListener("click", () => {
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 });
+
+for (const id of ["depth", "width", "split", "reuse", "structure-seed", "parameter-seed", "structure-seed-mode", "parameter-seed-mode"]) {
+  byId(id).addEventListener("change", persistTree);
+  if (["text", "number"].includes(byId(id).type)) byId(id).addEventListener("input", persistTree);
+}
+async function restoreTree() {
+  structureControls.disabled = true;
+  let saved;
+  try { saved = await readViewState("composite"); } catch { saved = null; }
+  if (!saved || typeof saved.schema !== "string") { structureControls.disabled = false; return; }
+  restoring = true;
+  structureControls.disabled = true;
+  parameterControls.disabled = true;
+  showStatus("Восстанавливаем задачу…");
+  try {
+    // Validate the stored exact schema; never reconstruct it with a new seed.
+    await postJSON("presentation", '{"schema":' + saved.schema + ',"seed":null}');
+    await showSchema({ raw: saved.schema, data: JSON.parse(saved.schema) });
+    if (saved.parameterSeed != null) {
+      const { data, raw } = await postJSON("variant", '{"schema":' + saved.schema + ',"seed":' + JSON.stringify(saved.parameterSeed) + '}');
+      showInstance(data.instance, data.presentation, raw);
+    }
+    for (const [id, value] of Object.entries(saved.controls ?? {})) {
+      if (!["depth", "width", "split", "reuse", "structure-seed", "parameter-seed", "structure-seed-mode", "parameter-seed-mode"].includes(id)) continue;
+      if (byId(id).type === "checkbox") byId(id).checked = value === true;
+      else byId(id).value = value;
+    }
+    for (const prefix of ["structure", "parameter"]) {
+      byId(prefix + "-seed-setting").hidden = !byId(prefix + "-seed-mode").checked;
+      byId(prefix + "-seed").disabled = !byId(prefix + "-seed-mode").checked;
+    }
+    showStatus("");
+  } catch { showStatus("Не удалось восстановить сохранённую задачу. Можно построить новую схему.", true); }
+  finally { restoring = false; structureControls.disabled = false; parameterControls.disabled = !currentSchema; }
+}
+void restoreTree();

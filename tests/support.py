@@ -40,6 +40,24 @@ def ensure_runtime():
         sys.path.insert(0, str(ROOT / "python"))
 
 
+def large_integer_schema(schema):
+    """Equivalent saved program with coefficients outside JavaScript's safe range."""
+    from copy import deepcopy
+    from composite_dataset import render
+    from composite_dataset.schema import _expected_bindings, schema_id
+    result = deepcopy(schema)
+    result.pop('problem_template')
+    for node in result['nodes']:
+        for name in ('numerator', 'denominator', 'divisor'):
+            node['profile']['classifier'][name] *= 2**100 + 1
+    by_id = {node['node_id']: node for node in result['nodes']}
+    for node in result['nodes']:
+        node['bindings'] = _expected_bindings(node, by_id)
+    result['schema_id'] = schema_id(result)
+    result['problem_template'] = render(result)
+    return result
+
+
 WEBKIT_RUNNER = r'''
 #import <WebKit/WebKit.h>
 
@@ -137,6 +155,14 @@ const change = (id, value) => {
   $(id).dispatchEvent(new Event("change", {bubbles: true}));
 };
 const idleAtomic = () => !$("atomic-catalogue-controls").disabled && $("atomic-status").hidden;
+const selectAtomic = async source => {
+  await until(idleAtomic, "catalogue ready");
+  const [subject, split] = source.split("/");
+  if ($("atomic-subject").value !== subject) { change("atomic-subject", subject); await until(idleAtomic, "subject selected"); }
+  if ($("atomic-split").value !== split) { change("atomic-split", split); await until(idleAtomic, "split selected"); }
+  change("atomic-problem-id", source);
+  await until(idleAtomic, "task selected explicitly");
+};
 const idleComposite = () => $("composite-status").hidden && !$("composite-structure-controls").disabled;
 '''
 

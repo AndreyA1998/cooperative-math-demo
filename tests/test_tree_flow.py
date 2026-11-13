@@ -97,7 +97,7 @@ class TreeFlowTests(unittest.TestCase):
                   stages(false);
                   check(!$("composite-instance-result").hidden && $("composite-root-answer").textContent === "—", "Bare root answer lacks a dash");
                   check(cards.querySelectorAll(".subproblem-answer strong").length === expected.nodes && [...cards.querySelectorAll(".subproblem-answer strong")].every(node => node.textContent === "—"), "Bare card answers lack dashes");
-                  check($("composite-schema-meta").textContent.includes("ширина основания: " + expected.width), "Actual width is absent");
+                  check($("composite-schema-meta").textContent.includes(expected.width + " агент"), "Actual width is absent");
                   check($("composite-copy-current").parentElement === $("composite-download").parentElement && $("composite-copy-current").closest(".tree-card .section-heading"), "Copy is not adjacent to the top download");
                   check(!cards.textContent.includes("mod(a, m)") && !cards.textContent.includes("сокращённой дроби с положительным знаменателем") && !cards.textContent.includes("округление вниз"), "Generic adapter explanations remain visible");
                   const bareTree = tree.innerHTML;

@@ -15,7 +15,7 @@ from types import SimpleNamespace, FunctionType, CodeType
 from fractions import Fraction
 
 from template_dataset.registry import get_template
-from .expression_patterns import source_expression_parts
+from .expression_patterns import source_expression_parts, formatter_meaning, source_sequence_meaning
 from .source_bindings import bind_source
 from composite_dataset.patterns import (
     _Field, _SourceField, _Fragment, _get_pattern, _json, _conditions, _case_pattern,
@@ -77,8 +77,8 @@ def _operator_math(operator, label):
         condition = ref + '<' + _number(classifier['cut'])
     else:
         spec = classifier['spec']
-        n = r'\text{числитель}\left(' + ref + r'\right)'
-        d = r'\text{знаменатель}\left(' + ref + r'\right)'
+        n = r'\operatorname{numerator}\left(' + ref + r'\right)'
+        d = r'\operatorname{denominator}\left(' + ref + r'\right)'
         numerator = _linear_math(((spec['numerator'], n), (spec['denominator'], d)))
         quotient = numerator if spec['divisor'] == 1 else r'\left\lfloor\frac{' + numerator + '}{' + str(spec['divisor']) + r'}\right\rfloor'
         if spec['divisor'] != 1:
@@ -235,6 +235,10 @@ class _ExpressionField:
         return self.expression.label
 
     @property
+    def symbolic_math(self):
+        return getattr(self.expression, 'math', None)
+
+    @property
     def names(self):
         return self.expression.names
 
@@ -353,9 +357,11 @@ def _lift_call(function, record, *, tex=False, symbolic_constant=False):
         names = tuple(dict.fromkeys(name for expression in expressions for name in expression.names))
         if tex and not names:
             return function(*_resolve_expressions(args, {}), **_resolve_expressions(kwargs, {}))
-        label = function.__name__.strip('_') + '(' + ', '.join(names) + ')'
+        meaning = formatter_meaning(function, args, kwargs, lambda value: value.label if isinstance(value, _Expression) else str(value))
+        label = meaning[0] if meaning else function.__name__.strip('_') + '(' + ', '.join(names) + ')'
         value = lambda p: function(*_resolve_expressions(args, p), **_resolve_expressions(kwargs, p))
         expression = _Expression(label, names, value, record)
+        if meaning: expression.math = meaning[1]
         return record(_ExpressionField(expression)) if tex else expression
     return call
 
@@ -526,6 +532,12 @@ def _derived_source_parts(template):
         for index, match in enumerate(context['spans']):
             start, end = match.span()
             symbolic = descriptions[index] if descriptions is not None else None
+            if isinstance(symbolic, (int, float, Fraction)) and symbolic == int(match[0].replace(',', '')):
+                # A literal returned by the native display program is not an
+                # unknown expression owned by every parameter.
+                parts.append(problem[offset:end])
+                offset = end
+                continue
             names = symbolic.names if isinstance(symbolic, _Expression) else tuple(template.parameters)
             label = symbolic.label if isinstance(symbolic, _Expression) else 'expression ' + str(index + 1)
             field = _DerivedSourceField(context, index, match[0], problem[:start].rstrip().endswith(('^', '_')), names, label)
@@ -579,19 +591,33 @@ def _decimal_parts(parts, template):
 def _atomic_parts(source_id):
     template = get_template(source_id)
     rewrites = _has_text_rewrite(template.render)
-    builders = [_source_parts, _derived_source_parts, bind_source]
+    builders = [bind_source, _source_parts, _derived_source_parts]
     if not rewrites:
         builders.extend((_proxy_parts, _expression_parts, lambda t: _expression_parts(t, lifted=True)))
     builders.append(source_expression_parts)
     for build in builders:
         try:
-            parts = _decimal_parts(build(template), template)
+            parts = source_sequence_meaning(template, _decimal_parts(build(template), template))
             if parts and not any(_structural_tex(p.fill(template.original)) for p in parts if not isinstance(p, str) and not getattr(p, 'conditional_literal', False)) and ''.join(p if isinstance(p, str) else p.fill(template.original) for p in parts) == template.render(template.original):
                 return parts
         except (ArithmeticError, AttributeError, IndexError, KeyError, TypeError, ValueError):
             pass
     return ()
 
+
+
+def _plain_native_field(field, domain):
+    """Formatting changes the spelling, not the underlying named quantity."""
+    name = field.name + ''.join('[' + str(index + 1) + ']' for index in field.path)
+    if field.conversion == 'repr' and not field.path:
+        kind = domain.get('type', '')
+        if kind in ('str', 'string'): name = '"' + name + '"'
+        elif kind.startswith('list'): name = '[' + name + ' entries]'
+    width = re.search(r'\d+', field.spec)
+    if width and width[0].startswith('0'):
+        name += ' (' + str(int(width[0])) + ' digits, including leading zeros)'
+    if field.spec.startswith('+'): name = '+' + name
+    return name
 
 def atomic_presentation(source_id, params=None):
     """Annotate an ordinary atomic domain without limiting it to binary profiles.
@@ -614,14 +640,12 @@ def atomic_presentation(source_id, params=None):
             if isinstance(part, str):
                 segments.append({'kind': 'text', 'text': part})
                 continue
-            name = part.label()
+            name = _plain_native_field(part, template.parameters[part.name]) if isinstance(part, _Field) else part.label()
             if getattr(part, 'conditional_literal', False):
                 segments.append({'kind': 'text', 'text': name if params is None else part.fill(params),
                                  'parameters': list(part.names), 'control': part.control})
                 continue
             names = [part.name] if isinstance(part, (_Field, _SourceField)) else list(part.names)
-            if isinstance(part, _Field):
-                notes.extend(note for note in part.legend() if note not in notes)
             segments.append({'kind': 'parameter', 'name': name, 'key': name,
                              'text': name if params is None else part.fill(params),
                              'role': 'external', 'filled': params is not None, 'parameters': names})

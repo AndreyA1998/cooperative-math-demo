@@ -72,8 +72,8 @@ def plain_value(expression, environment):
 
 def tex_arithmetic(source):
     source = re.sub(r'\\operatorname\{Ans\}\((\d+)\)', lambda m: r'\text{выход №' + m[1] + '}', source)
-    source = re.sub(r'\\text\{числитель\}\\left\(\\text\{выход №(\d+)\}\\right\)', r'n\1', source)
-    source = re.sub(r'\\text\{знаменатель\}\\left\(\\text\{выход №(\d+)\}\\right\)', r'd\1', source)
+    source = re.sub(r'\\operatorname\{numerator\}\\left\(\\text\{выход №(\d+)\}\\right\)', r'n\1', source)
+    source = re.sub(r'\\operatorname\{denominator\}\\left\(\\text\{выход №(\d+)\}\\right\)', r'd\1', source)
     source = re.sub(r'\\text\{выход №(\d+)\}', r'R\1', source)
 
     def group(start):
@@ -138,6 +138,29 @@ def plain_rules(text, answers):
     return environment
 
 
+def text_tokens(source):
+    """Decode literal TeX text groups, including nested escape macro braces."""
+    result, position = [], 0
+    escapes = {r'\textbackslash{}': '\\', r'\textasciicircum{}': '^',
+               r'\textasciitilde{}': '~'}
+    while (start := source.find(r'\text{', position)) >= 0:
+        position = start + len(r'\text{')
+        value = ''
+        while position < len(source) and source[position] != '}':
+            if source[position] == '\\':
+                token = next((token for token in escapes if source.startswith(token, position)), None)
+                if token:
+                    value += escapes[token]; position += len(token); continue
+                if position + 1 < len(source) and source[position + 1] in '{}_%#&$':
+                    value += source[position + 1]; position += 2; continue
+                raise AssertionError('Undeclared literal escape in ' + source[position:])
+            value += source[position]; position += 1
+        if position >= len(source):
+            raise AssertionError('Unclosed text group')
+        result.append(value); position += 1
+    return result
+
+
 def pretty_rules(rules, answers, parameter_types):
     environment = dict(answers)
     for rule in rules:
@@ -148,13 +171,13 @@ def pretty_rules(rules, answers, parameter_types):
             first, signal, second = branches.groups()
             branch = first if environment[signal.replace(r'\_', '_')] == 0 else second
             names = [name.strip() for name in left.strip('()').split(',')]
-            tokens = re.findall(r'\\text\{([^{}]*)\}', branch)
+            tokens = text_tokens(branch)
             if len(tokens) != len(names):
                 raise AssertionError('One displayed value is required for every target parameter')
             # Presentation removes JSON string quotes. Parameter types are still
             # declared by the schema: read string glyphs exactly, including 0011.
             # This uses only type information, never the row's expected values.
-            values = [token.replace(r'\_', '_') if parameter_types[name] is str
+            values = [token if parameter_types[name] is str
                       else parameter_value(token) for name, token in zip(names, tokens)]
             value = tuple(values) if left.startswith('(') else values[0]
         elif r'\bmod' in right:

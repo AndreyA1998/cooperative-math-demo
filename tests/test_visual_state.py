@@ -12,7 +12,7 @@ class VisualStateTests(unittest.TestCase):
             with static_origin() as server:
                 result = run_browser(runner, server.url + "?id=prealgebra/test/11", r'''
                   check($("atomic-reset"), "Atomic task has no reset to the bare pattern");
-                  await until(idleAtomic, "initial bare pattern");
+                  await selectAtomic("prealgebra/test/11");
                   check($("atomic-problem-text").querySelector(".parameter-slot, [data-parameters]"), "Initial task has no symbolic slots");
                   const settled = async () => { await until(() => [...document.querySelectorAll(".tab-panel:not([hidden]) .math-fragment")].every(node => node.hasAttribute("data-rendered")) || [...document.querySelectorAll(".tab-panel:not([hidden]) .help:not([hidden])")].some(node => node.textContent.includes("LaTeX")), "typesetting", {timeout: 20000}); };
                   await settled();

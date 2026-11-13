@@ -1,5 +1,6 @@
-import { request } from "./transport.js";
+import { request, hideIdleRuntime } from "./transport.js";
 import { MathPresentation } from "./math-renderer.js";
+import { readViewState, saveViewState, readCatalogueCache, saveCatalogueCache } from "./view-state.js";
 
 const byId = (id) => document.getElementById("atomic-" + id);
 const catalogueControls = byId("catalogue-controls");
@@ -17,6 +18,13 @@ let activeGroup;
 let activeId;
 let initialising = false;
 let revision = 0;
+let restoring = false;
+function persistTask() {
+  const state = tasks.get(activeId);
+  if (!state || restoring) return;
+  void saveViewState("atomic", { id: activeId, seedMode: state.seedMode ?? false,
+    seed: state.seed ?? "", variantSeed: state.variant?.seed ?? null });
+}
 
 async function getJSON(action, fields) {
   return (await request("GET", "/api/" + action, new URLSearchParams(fields).toString())).data;
@@ -35,6 +43,7 @@ function remember() {
   const state = tasks.get(activeId);
   if (state) Object.assign(state, { seed: seedInput.value, seedMode: seedMode.checked });
   if (activeGroup && activeId) groups.set(activeGroup, activeId);
+  persistTask();
 }
 function filterCatalogue(preferredId) {
   activeGroup = subjectSelect.value + "/" + splitSelect.value;
@@ -95,6 +104,7 @@ function renderTask(state) {
     byId("renderer-note").hidden = rendered;
   });
   updateURL(state);
+  persistTask();
 }
 async function selectTask() {
   remember();
@@ -170,37 +180,55 @@ async function init() {
   if (initialising || catalogue.length) return;
   initialising = true;
   try {
-    catalogue = (await getJSON("catalogue")).problems;
+    const cache = await readCatalogueCache();
+    catalogue = cache.problems ?? (await getJSON("catalogue")).problems;
+    if (cache.problems) hideIdleRuntime();
+    else await saveCatalogueCache(cache.version, catalogue);
     const subjects = [...new Set(catalogue.map(({ subject }) => subject))];
     subjectSelect.replaceChildren(...subjects.map((subject) => new Option(subjectNames[subject] ?? subject, subject)));
-    const query = new URLSearchParams(window.location.search);
-    const requestedId = query.get("id");
-    const requested = catalogue.find(({ id }) => id === requestedId);
-    subjectSelect.value = requested?.subject ?? (subjects.includes("prealgebra") ? "prealgebra" : subjects[0]);
-    splitSelect.value = requested?.split ?? "test";
-    filterCatalogue(requested?.id);
+    subjectSelect.value = subjects.includes("algebra") ? "algebra" : subjects[0];
+    splitSelect.value = "test";
+    filterCatalogue();
     catalogueControls.disabled = false;
     setSeedMode(false);
-    if (requested) {
-      await selectTask();
-    } else {
-      const empty = new Option("Выберите задачу", "", true, true);
-      empty.disabled = true;
-      idSelect.prepend(empty);
-      idSelect.value = "";
-      byId("generate").disabled = true;
-      byId("copy").disabled = true;
-      byId("problem-card").hidden = true;
-    }
+    seedInput.value = "";
+    const empty = new Option("Выберите", "", true, true);
+    empty.disabled = true;
+    idSelect.prepend(empty);
+    idSelect.value = "";
+    byId("generate").disabled = true;
+    byId("copy").disabled = true;
+    byId("problem-card").hidden = true;
+    // Only a saved user selection restores on reload; query parameters do not generate a task.
+    const url = new URL(window.location.href);
+    url.searchParams.delete("id");
+    url.searchParams.delete("seed");
+    window.history.replaceState(null, "", url);
     showStatus("");
-    if (requested && query.has("seed")) {
-      setSeedMode(true);
-      seedInput.value = query.get("seed");
-      await generateVariant(seedInput.value);
-    } else if (requestedId && !requested) showStatus("Задача из ссылки отсутствует в каталоге.", true);
+    catalogueControls.disabled = true;
+    const saved = await readViewState("atomic");
+    catalogueControls.disabled = false;
+    const entry = saved && catalogue.find(item => item.id === saved.id);
+    if (entry) {
+      restoring = true;
+      try {
+        subjectSelect.value = entry.subject; splitSelect.value = entry.split;
+        filterCatalogue(entry.id); await selectTask();
+        const state = tasks.get(activeId);
+        if (state) {
+          state.seedMode = saved.seedMode === true; state.seed = String(saved.seed ?? "");
+          setSeedMode(state.seedMode); seedInput.value = state.seed;
+          if (saved.variantSeed != null) await generateVariant(String(saved.variantSeed));
+          // The seed input may contain an unsubmitted draft for the next task.
+          state.seed = String(saved.seed ?? ""); state.seedMode = saved.seedMode === true;
+          renderTask(state);
+        }
+      } finally { restoring = false; }
+    }
   } catch { showStatus("Не удалось загрузить каталог. Повторите загрузку выше.", true); }
   finally { initialising = false; }
 }
+seedInput.addEventListener("input", remember);
 seedMode.addEventListener("change", () => { setSeedMode(seedMode.checked); remember(); });
 subjectSelect.addEventListener("change", () => { void changeFilter(); });
 splitSelect.addEventListener("change", () => { void changeFilter(); });

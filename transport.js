@@ -25,3 +25,5 @@ retry?.addEventListener('click', () => {
   try { rpc.start(); } catch (error) { rpc.fail(error); }
 });
 export const request = (method, path, query = '', body = null) => rpc.request(method, path, query, body);
+
+export function hideIdleRuntime() { if (!rpc.worker && banner) banner.hidden = true; }

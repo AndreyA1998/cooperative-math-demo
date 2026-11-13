@@ -14,6 +14,7 @@ import itertools
 import operator
 import textwrap
 from dataclasses import dataclass
+from fractions import Fraction
 from functools import lru_cache
 from types import FunctionType, CodeType
 
@@ -48,8 +49,65 @@ class MathValue(Value):
 
 
 @dataclass(frozen=True)
+class MathText(MathValue):
+    """A source formatter returns text representing this mathematics."""
+
+
+@dataclass(frozen=True)
 class SequenceValue(Value):
     length_range: tuple = ()
+
+
+@dataclass(frozen=True)
+class NamedSequence(Value):
+    """An explicitly described native sequence, before display separators."""
+
+
+@dataclass(frozen=True)
+class LetterSet(Value):
+    """A source alphabet prefix, or a union of such prefixes."""
+
+
+@dataclass(frozen=True)
+class ChoiceValue(Value):
+    selector: object = None
+    choices: object = None
+
+
+@dataclass(frozen=True)
+class StringValue(Value):
+    """A source str() conversion, whose multiplication repeats characters."""
+
+
+@dataclass(frozen=True)
+class RepeatedText(MathValue):
+    pass
+
+
+@dataclass(frozen=True)
+class RangeValue(Value):
+    count: object = None
+    start: object = 0
+    stop: object = None
+    step: object = 1
+
+
+@dataclass(frozen=True)
+class RepeatedSequence(Value):
+    item: object = None
+    count: object = None
+
+
+@dataclass(frozen=True)
+class LocalDisplayFunction:
+    node: object
+    environment: dict
+
+
+@dataclass(frozen=True)
+class GeneratedSequence(Value):
+    element: object = None
+    rule: str = ''
 
 
 @dataclass(frozen=True)
@@ -97,6 +155,9 @@ class Text:
 
 
 def dependencies(value):
+    if isinstance(value, LocalDisplayFunction):
+        loaded = {node.id for node in ast.walk(value.node) if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load)}
+        return dependencies({key: item for key, item in value.environment.items() if key in loaded})
     if isinstance(value, (Value, Text)):
         return value.names
     if isinstance(value, (tuple, list)):
@@ -107,6 +168,11 @@ def dependencies(value):
 
 
 def resolve(value, params):
+    if isinstance(value, LocalDisplayFunction):
+        env = {key: resolve(item, params) for key, item in value.environment.items()}
+        code = compile(ast.fix_missing_locations(ast.Module([copy.deepcopy(value.node)], [])), '<display-function>', 'exec')
+        exec(code, env, env)
+        return env[value.node.name]
     if isinstance(value, (Value, Text)):
         return value.get(params)
     if isinstance(value, (tuple, list)):
@@ -184,6 +250,106 @@ def definition(function):
     raise ValueError('Ambiguous renderer source')
 
 
+def text_tex(value):
+    escapes = {'\\': r'\textbackslash{}', '{': r'\{', '}': r'\}', '_': r'\_',
+               '%': r'\%', '&': r'\&', '#': r'\#', '$': r'\$', '^': r'\textasciicircum{}', '~': r'\textasciitilde{}'}
+    return r'\text{' + ''.join(escapes.get(character, character) for character in str(value)) + '}'
+
+
+def symbolic_tex(expression):
+    """Render a recorded arithmetic expression, without evaluating its names."""
+    def visit(node):
+        if isinstance(node, ast.Name):
+            return r'\text{' + node.id.replace('_', r'\_') + '}'
+        if isinstance(node, ast.Constant) and type(node.value) in (int, float):
+            return str(node.value)
+        if isinstance(node, ast.UnaryOp) and isinstance(node.op, (ast.UAdd, ast.USub)):
+            return ('-' if isinstance(node.op, ast.USub) else '+') + visit(node.operand)
+        if isinstance(node, ast.Subscript) and isinstance(node.slice, ast.Constant):
+            return visit(node.value) + '_{' + str(node.slice.value) + '}'
+        if isinstance(node, ast.BinOp):
+            a, b = visit(node.left), visit(node.right)
+            if isinstance(node.op, ast.Div): return r'\frac{' + a + '}{' + b + '}'
+            if isinstance(node.op, ast.FloorDiv): return r'\left\lfloor\frac{' + a + '}{' + b + r'}\right\rfloor'
+            if isinstance(node.op, ast.Pow): return '{' + a + '}^{' + b + '}'
+            sign = {ast.Add: '+', ast.Sub: '-', ast.Mult: r'\cdot', ast.Mod: r'\bmod'}.get(type(node.op))
+            if sign: return '(' + a + sign + b + ')'
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+            args = [visit(arg) for arg in node.args]
+            if node.func.id == 'abs' and len(args) == 1: return r'\left|' + args[0] + r'\right|'
+            if node.func.id in ('Fraction', 'fraction') and len(args) == 2: return r'\frac{' + args[0] + '}{' + args[1] + '}'
+            if node.func.id == 'factorial' and len(args) == 1: return '(' + args[0] + ')!'
+            if node.func.id == 'comb' and len(args) == 2: return r'\binom{' + args[0] + '}{' + args[1] + '}'
+            if node.func.id in ('min', 'max', 'lcm'): return r'\operatorname{' + node.func.id + '}(' + ','.join(args) + ')'
+        raise ValueError('No mathematical notation for this display expression')
+    try: return visit(ast.parse(expression, mode='eval').body)
+    except (SyntaxError, ValueError, TypeError): return None
+
+
+def formatter_meaning(function, args, kwargs, label):
+    """Known native formatting contracts retain the supplied argument formulas."""
+    name, module = getattr(function, '__name__', '') or '', getattr(function, '__module__', '') or ''
+    if function is Fraction:
+        if len(args) == 1: description = label(args[0])
+        elif len(args) == 2: description = '(' + label(args[0]) + ')/(' + label(args[1]) + ')'
+        else: return None
+        return description, symbolic_tex(description)
+    if not module.startswith('template_dataset.families.'):
+        return None
+    rational_formatters = {
+        ('template_dataset.families.intermediate_algebra.callable_bindings', 'tex'),
+        ('template_dataset.families.precalculus.determinants_vectors_and_planes', 'tex_fraction'),
+        ('template_dataset.families.geometry.euclidean_and_coordinate_models', '_latex_fraction'),
+    }
+    if (name == '_tex' or (module, name) in rational_formatters) and len(args) == 1 and not kwargs:
+        description = label(args[0])
+        return description, symbolic_tex(description)
+    if (name == '_tex_polynomial' and module.endswith('.algebra.equations_and_expressions') and args):
+        variable = kwargs.get('variable', args[1] if len(args) > 1 else 'x')
+        if not isinstance(variable, str): return None
+        coefficients = args[0]
+        length = getattr(coefficients, 'length', None)
+        if not isinstance(coefficients, (tuple, list)) and type(length) is int:
+            coefficients = [coefficients[index] for index in range(length)]
+        if not isinstance(coefficients, (tuple, list)):
+            description = label(coefficients)
+            if re.fullmatch(r'[A-Za-z_]\w*', description) and tuple(getattr(coefficients, 'names', ())) == (description,):
+                symbol = symbolic_tex(description)
+                return 'polynomial', r'\sum_{i=0}^{\operatorname{length}(' + symbol + ')-1}' + symbol + '_{i+1}' + variable + '^i'
+            return None
+        terms = []
+        for degree, coefficient in reversed(list(enumerate(coefficients))):
+            if type(coefficient) in (int, float) and coefficient == 0: continue
+            coefficient_tex = symbolic_tex(label(coefficient))
+            if coefficient_tex is None: return None
+            power = variable + ('^{' + str(degree) + '}' if degree > 1 else '') if degree else ''
+            terms.append((coefficient_tex if not power or not (type(coefficient) in (int, float) and coefficient == 1) else '') + power)
+        return 'polynomial', ' + '.join(terms) or '0'
+    if (name == 'exp_factors' and module == 'template_dataset.families.intermediate_algebra.polynomial_quotients_and_rational_graphs' and len(args) == 2):
+        roots, powers = (dependencies(arg) for arg in args)
+        if len(roots) == len(powers) == 1:
+            root, power = text_tex(roots[0]), text_tex(powers[0])
+            return 'factored polynomial', r'\prod_{j=1}^{\operatorname{length}(' + root + ')}(x-' + root + '_j)^{' + power + '_j}'
+    if name == 'decimal' and module in (
+            'template_dataset.families.word_problems.decimal_arithmetic',
+            'template_dataset.families.algebra.given_bindings'):
+        places = kwargs.get('places', args[1] if len(args) > 1 else 2)
+        if not args: return None
+        if type(places) is int: divisor = str(10**places)
+        elif dependencies(places): divisor = '(10^(' + label(places) + '))'
+        else: return None
+        fraction = '(' + label(args[0]) + ')/' + divisor
+        return 'decimal expansion of ' + fraction, None
+    if (name == 'decimal' and module == 'template_dataset.families.word_problems.rounding_statistics_and_progressions'
+            and args and isinstance(args[0], dict) and {'numerator', 'denominator'} <= args[0].keys()):
+        fraction = '(' + label(args[0]['numerator']) + ')/(' + label(args[0]['denominator']) + ')'
+        return 'decimal expansion of ' + fraction, None
+    if (name == '_time_label' and module == 'template_dataset.families.word_problems.arithmetic_story_models'
+            and len(args) == 1):
+        return 'clock time at ' + label(args[0]) + ' minutes after midnight', None
+    return None
+
+
 class Returned(Exception):
     def __init__(self, value):
         self.value = value
@@ -257,6 +423,20 @@ class Interpreter:
         def symbolic(part):
             if isinstance(part, ast.Name): return item(env.get(part.id)) or part.id
             if isinstance(part, ast.Constant): return str(part.value)
+            if isinstance(part, (ast.Tuple, ast.List)):
+                return '(' + ', '.join(symbolic(element) for element in part.elts) + ')'
+            if isinstance(part, ast.BoolOp):
+                return (' and ' if isinstance(part.op, ast.And) else ' or ').join(symbolic(value) for value in part.values)
+            if isinstance(part, ast.Attribute):
+                return part.attr + '(' + symbolic(part.value) + ')'
+            if isinstance(part, ast.Subscript) and not isinstance(part.slice, ast.Slice):
+                container = self.expression(part.value, env)
+                index = self.expression(part.slice, env)
+                if isinstance(container, (dict, list, tuple)) and isinstance(index, (str, int)):
+                    try: return item(container[index]) or str(container[index])
+                    except (KeyError, IndexError, TypeError): pass
+                return symbolic(part.value) + '[' + symbolic(part.slice) + ']'
+
             if isinstance(part, ast.Subscript) and isinstance(part.value, ast.Name) and isinstance(part.slice, ast.Constant):
                 container = env.get(part.value.id)
                 if isinstance(container, (dict, tuple, list)):
@@ -275,22 +455,34 @@ class Interpreter:
                     return b[1:-len(a)-2]
                 return '(' + a + sign + b + ')'
             if isinstance(part, ast.UnaryOp):
-                return ('-' if isinstance(part.op, ast.USub) else '+') + symbolic(part.operand)
+                return ('not ' if isinstance(part.op, ast.Not) else '-' if isinstance(part.op, ast.USub) else '+') + symbolic(part.operand)
             if isinstance(part, ast.Compare):
                 marks = {ast.Eq: '=', ast.NotEq: '≠', ast.Lt: '<', ast.LtE: '≤', ast.Gt: '>', ast.GtE: '≥', ast.In: ' in '}
                 return symbolic(part.left) + ''.join(marks.get(type(op), '?') + symbolic(right) for op, right in zip(part.ops, part.comparators))
             if isinstance(part, ast.IfExp):
-                choices = (getattr(part.body, 'value', None), getattr(part.orelse, 'value', None))
-                return ('sign' if set(choices) <= {'+', '-'} else 'choice') + '(' + ', '.join(names) + ')'
+                return '(' + (symbolic(part.body) or 'omitted') + ' when ' + symbolic(part.test) + '; ' + (symbolic(part.orelse) or 'omitted') + ' otherwise)'
             if isinstance(part, ast.Call):
                 name = part.func.id if isinstance(part.func, ast.Name) else part.func.attr if isinstance(part.func, ast.Attribute) else 'value'
+                if name == 'get' and isinstance(part.func, ast.Attribute):
+                    container = self.expression(part.func.value, env)
+                    if isinstance(container, dict):
+                        value = self.expression(part, env)
+                        return item(value) or str(value)
+                if name in ('Fraction', 'F', 'Q') and len(part.args) == 1:
+                    return symbolic(part.args[0])
+                if name == 'len' and len(part.args) == 1:
+                    return 'number of entries in ' + symbolic(part.args[0])
+                if name in ('str', 'int') and len(part.args) == 1:
+                    return symbolic(part.args[0])
+                if name in ('abs', 'min', 'max', 'round', 'Fraction', 'F', 'Q'):
+                    return ('fraction' if name in ('Fraction', 'F', 'Q') else name) + '(' + ', '.join(symbolic(arg) for arg in part.args) + ')'
                 if name == 'join' and part.args and isinstance(part.args[0], ast.Name):
                     name = part.args[0].id
                 name = {'F': 'fraction', 'Q': 'fraction', 'Fraction': 'fraction', '_tex': 'fraction', '_tex_polynomial': 'polynomial', 'str': 'value', 'sorted': 'sequence'}.get(name, name.strip('_'))
                 return name + '(' + ', '.join(names) + ')'
             return 'expression(' + ', '.join(names) + ')'
         result = symbolic(node)
-        return result if len(result) <= 140 else 'expression(' + ', '.join(names) + ')'
+        return result
 
     def native(self, node, env, label=None):
         loaded = self.free_identifiers(node)
@@ -313,7 +505,96 @@ class Interpreter:
         return Value(names, evaluate, label or self.label(node, env, names))
 
     def call(self, function, args, kwargs):
-        if function is zip and all(isinstance(value, (list, tuple, range)) for value in args):
+        if isinstance(function, LocalDisplayFunction):
+            node = function.node
+            parameters = [argument.arg for argument in (*node.args.posonlyargs, *node.args.args)]
+            if len(args) > len(parameters) or node.args.vararg or node.args.kwarg:
+                raise ValueError('Unsupported display local arguments')
+            env = dict(function.environment)
+            env.update(zip(parameters, args)); env.update(kwargs)
+            defaults = node.args.defaults
+            for parameter, default in zip(parameters[-len(defaults):] if defaults else (), defaults):
+                if parameter not in env: env[parameter] = self.expression(default, function.environment)
+            self.depth += 1
+            try:
+                if self.depth > 30: raise ValueError('Recursive display source')
+                self.block(node.body, env)
+            except Returned as result:
+                return result.value
+            finally:
+                self.depth -= 1
+            return None
+        label = lambda value: value.description if isinstance(value, Value) else str(value)
+        names = dependencies((args, kwargs))
+        meaning = formatter_meaning(function, args, kwargs, label)
+        if names and meaning:
+            description, mathematical = meaning
+            evaluate = lambda p: function(*resolve(args, p), **resolve(kwargs, p))
+            kind = MathValue if function is Fraction else MathText
+            return kind(names, evaluate, description, mathematical) if mathematical else Value(names, evaluate, description)
+        if names and function is abs and len(args) == 1:
+            value = args[0]
+            description = 'abs(' + label(value) + ')'
+            mathematical = symbolic_tex(description)
+            return MathValue(names, lambda p: abs(resolve(value,p)), description, mathematical) if mathematical else Value(names, lambda p: abs(resolve(value,p)), description)
+        if names and getattr(function, '__module__', '') == 'math' and getattr(function, '__name__', '') == 'isqrt' and len(args) == 1:
+            value = args[0]; mathematical = symbolic_tex(label(value))
+            if mathematical:
+                return MathValue(names, lambda p: function(resolve(value,p)), 'integer square root of ' + label(value), r'\lfloor\sqrt{' + mathematical + r'}\rfloor')
+        if function is chr and names and len(args) == 1:
+            value = args[0]
+            return Value(names, lambda p: chr(resolve(value,p)), 'character with Unicode code ' + label(value) + ' (A=65, B=66, …)')
+        if function is range and names and 1 <= len(args) <= 3:
+            start, stop = (0, args[0]) if len(args) == 1 else args[:2]
+            step = args[2] if len(args) == 3 else 1
+            count = args[0] if len(args) == 1 else None
+            return RangeValue(names, lambda p: range(*resolve(args, p)),
+                              label(start) + ' through ' + label(stop) + ' (exclusive), step ' + label(step),
+                              count, start, stop, step)
+        if function is int and len(args) == 1 and isinstance(args[0], RepeatedText):
+            value = args[0]
+            return MathValue(value.names, lambda p: int(value.get(p)), value.description, value.math)
+        if function in (tuple, list) and len(args) == 1 and isinstance(args[0], (tuple, list, range)):
+            return function(args[0])
+        if function is str and len(args) == 1 and isinstance(args[0], Text):
+            return args[0]
+        if function is str and len(args) == 1 and isinstance(args[0], Value):
+            value = args[0]
+            evaluate = lambda p: str(value.get(p))
+            return MathText(value.names, evaluate, value.description, value.math) if getattr(value, 'math', None) else StringValue(value.names, evaluate, value.description)
+        if function is len and len(args) == 1 and isinstance(args[0], Value):
+            value = args[0]
+            return Value(value.names, lambda p: len(value.get(p)), 'number of entries in ' + value.description)
+        if function is map and len(args) == 2 and args[0] is str and isinstance(args[1], NamedSequence):
+            value = args[1]
+            return NamedSequence(value.names, lambda p: tuple(map(str, value.get(p))), value.description)
+        if function is map and len(args) == 2 and args[0] is str and isinstance(args[1], SequenceValue):
+            value = args[1]
+            return SequenceValue(value.names, lambda p: tuple(map(str, value.get(p))), value.description, value.length_range)
+        if function is sorted and len(args) == 1 and isinstance(args[0], LetterSet) and not kwargs:
+            letters = args[0]
+            return LetterSet(letters.names, lambda p: sorted(letters.get(p)), letters.description)
+        # This native helper declares its polynomial terms explicitly. Read that
+        # declaration rather than inferring a formula from generated examples.
+        if (isinstance(function, FunctionType)
+                and function.__module__ == 'template_dataset.families.algebra.parameter_bindings'
+                and function.__name__ == 'polynomial'):
+            bound = inspect.signature(function).bind(*args, **kwargs)
+            bound.apply_defaults()
+            declaration = next(statement.value for statement in definition(function).body
+                               if isinstance(statement, ast.Assign)
+                               and any(isinstance(target, ast.Name) and target.id == 'terms' for target in statement.targets))
+            terms = [(coefficient, suffix.get({}) if isinstance(suffix, Text) and not suffix.names else suffix)
+                     for coefficient, suffix in self.expression(declaration, dict(bound.arguments))]
+            if all(isinstance(suffix, str) for _, suffix in terms):
+                parts = []
+                for coefficient, suffix in terms:
+                    if parts: parts.append(' + ')
+                    parts.extend((coefficient, suffix))
+                names = dependencies((args, kwargs))
+                return MathText(names, lambda p: function(*resolve(args, p), **resolve(kwargs, p)),
+                                 'polynomial(' + ', '.join(names) + ')', self.symbolic_math(concatenate(*parts)))
+        if function is zip and all(isinstance(value, (list, tuple, range, str)) for value in args):
             return tuple(zip(*args, **kwargs))
         if function is enumerate and args and isinstance(args[0], (list, tuple, range)):
             return tuple(enumerate(*args, **kwargs))
@@ -351,6 +632,37 @@ class Interpreter:
             self.depth -= 1
         return None
 
+    def comprehension_pattern(self, node, env):
+        """Show every generator and its source expression, in iteration order."""
+        child = dict(env)
+        rules = []
+        for number, generator in enumerate(node.generators):
+            iterable = self.expression(generator.iter, child)
+            targets = [generator.target] if isinstance(generator.target, ast.Name) else list(generator.target.elts)
+            names = [target.id for target in targets if isinstance(target, ast.Name)]
+            if len(names) != len(targets): raise ValueError('Unsupported display generator target')
+            variable = ', '.join(names)
+            if isinstance(iterable, RangeValue):
+                label = lambda value: value.description if isinstance(value, Value) else str(value)
+                rule = variable + ' from ' + label(iterable.start) + ' to before ' + label(iterable.stop) + ', step ' + label(iterable.step)
+            elif isinstance(iterable, (list, tuple, range)):
+                def label(value):
+                    if isinstance(value, Value): return value.description
+                    if isinstance(value, (tuple,list)): return '(' + ', '.join(label(item) for item in value) + ')'
+                    return str(value)
+                rule = '(' + variable + ') in [' + ', '.join(label(item) for item in iterable) + ']'
+            else:
+                rule = variable + ' in ' + iterable.description
+            rules.append(rule)
+            for name in names:
+                token = '__display_index_' + str(number) + '_' + name
+                child[name] = Value((token,), lambda p, key=token: p[key], name)
+            if generator.ifs:
+                rules.extend('keep only ' + self.label(condition, child, ()) for condition in generator.ifs)
+        element = self.expression(node.elt, child)
+        native = self.native(node, env)
+        return GeneratedSequence(native.names, lambda p: tuple(native.get(p)), 'ordered sequence', element, '; '.join(rules))
+
     def expression(self, node, env, *, interpolation=False):
         if isinstance(node, ast.Name):
             return env[node.id] if node.id in env else getattr(builtins, node.id)
@@ -374,11 +686,60 @@ class Interpreter:
                         elif conversion == 114: raw = repr(raw)
                         elif conversion == 97: raw = ascii(raw)
                         return format(raw, resolve(s, params))
-                    parts.append(Value(names, formatted, value.description if isinstance(value, Value) else self.label(item.value, env, names)) if names else formatted({}))
+                    if names:
+                        description = value.description if isinstance(value, Value) else self.label(item.value, env, names)
+                        mathematical = getattr(value, 'math', None) if spec == '' and item.conversion in (-1, 115) else None
+                        parts.append(MathValue(names, formatted, description, mathematical) if mathematical else Value(names, formatted, description))
+                    else:
+                        parts.append(formatted({}))
             return concatenate(*parts)
         if isinstance(node, ast.Subscript):
             container = self.expression(node.value, env)
-            index = self.native(node.slice, env)
+            if isinstance(container, ChoiceValue):
+                if isinstance(node.slice, ast.Slice):
+                    bounds = [None if bound is None else self.expression(bound, env)
+                              for bound in (node.slice.lower, node.slice.upper, node.slice.step)]
+                    key = slice(*bounds) if not dependencies(bounds) else None
+                else:
+                    key = self.expression(node.slice, env)
+                if key is not None and not dependencies(key):
+                    choices = {}
+                    for value, content in container.choices.items():
+                        try: choices[value] = content[key]
+                        except (KeyError, IndexError): continue  # guarded out by the source branch
+                    description = container.selector.description + ': ' + '; '.join(str(value) + ' → ' + (str(text) or 'omitted') for value,text in choices.items())
+                    return ChoiceValue(container.names, lambda p: container.get(p)[key], description, container.selector, choices)
+            if (isinstance(container, str) and container.isalpha() and container.isascii()
+                    and isinstance(node.slice, ast.Slice) and node.slice.lower is None
+                    and node.slice.step is None and node.slice.upper is not None):
+                count = self.expression(node.slice.upper, env)
+                if isinstance(count, Value):
+                    return LetterSet(count.names, lambda p, alphabet=container, size=count: alphabet[:size.get(p)],
+                                     'the first ' + count.description + ' letters of ' + container)
+            if isinstance(node.slice, ast.Slice) and isinstance(container, (str, list, tuple)) and not dependencies(container):
+                lower = 0 if node.slice.lower is None else self.expression(node.slice.lower, env)
+                upper = len(container) if node.slice.upper is None else self.expression(node.slice.upper, env)
+                step = 1 if node.slice.step is None else self.expression(node.slice.step, env)
+                if dependencies((lower, upper, step)):
+                    label = lambda value: value.description if isinstance(value, Value) else str(value)
+                    contents = ', '.join(map(str, container))
+                    description = ('the first ' + label(upper) + ' entries of [' + contents + ']'
+                                   if lower == 0 and step == 1 else 'entries of [' + contents + '] from position '
+                                   + label(lower) + ' (starting at 0) up to ' + label(upper) + ' (exclusive), step ' + label(step))
+                    return NamedSequence(dependencies((lower, upper, step)),
+                                         lambda p: container[slice(resolve(lower,p),resolve(upper,p),resolve(step,p))], description)
+            index = self.expression(node.slice, env) if not isinstance(node.slice, ast.Slice) else self.native(node.slice, env)
+            if isinstance(index, Text) and not index.names:
+                index = index.get({})
+            if isinstance(index, Value) and isinstance(container, dict) and not dependencies(container):
+                choices = '; '.join(str(key) + ' → ' + (str(value) or 'omitted') for key, value in container.items())
+                return ChoiceValue(index.names, lambda p: container[index.get(p)], index.description + ': ' + choices, index, container)
+            if isinstance(index, Value) and isinstance(container, (tuple, list, str)) and all(isinstance(item, str) for item in container):
+                if isinstance(container, str) and container == '0123456789ABCDEF':
+                    description = 'digit ' + index.description + ' (0–9, A–F)'
+                else:
+                    description = index.description + ': ' + '; '.join(str(i) + ' → ' + value for i, value in enumerate(container))
+                return Value(index.names, lambda p, values=container, key=index: values[key.get(p)], description)
             if isinstance(container, (dict, tuple, list, str)) and not dependencies(index):
                 return container[index]
         if interpolation:
@@ -386,8 +747,10 @@ class Interpreter:
             def has_text(value):
                 return isinstance(value, Text) or isinstance(value, (tuple, list)) and any(has_text(v) for v in value)
             structural = any(isinstance(item, ast.Constant) and isinstance(item.value, str) and '$' in item.value for item in ast.walk(node))
-            if not structural and not isinstance(node, ast.Call) and not any(has_text(env.get(key)) for key in loaded):
+            if not structural and not isinstance(node, (ast.Call, ast.IfExp)) and not any(has_text(env.get(key)) for key in loaded):
                 return self.native(node, env)
+        if isinstance(node, (ast.ListComp, ast.GeneratorExp)) and len(node.generators) > 1:
+            return self.comprehension_pattern(node, env)
         if isinstance(node, (ast.DictComp, ast.ListComp, ast.GeneratorExp)):
             rows = [dict(env)]
             for generator in node.generators:
@@ -395,6 +758,28 @@ class Interpreter:
                 for row in rows:
                     iterable = self.expression(generator.iter, row)
                     if isinstance(iterable, Value):
+                        bound_names = {item.id for item in ast.walk(generator.target) if isinstance(item, ast.Name)}
+                        if (isinstance(iterable, RangeValue) and iterable.count is not None and len(node.generators) == 1 and not generator.ifs
+                                and not isinstance(node, ast.DictComp) and not (self.free_identifiers(node.elt) & bound_names)):
+                            item = self.expression(node.elt, row)
+                            count = iterable.count
+                            return RepeatedSequence(dependencies((item, count)),
+                                lambda p, v=item, n=count: [resolve(v, p)] * n.get(p),
+                                'repeated terms', item, count)
+                        if (isinstance(iterable, RangeValue) and len(node.generators) == 1
+                                and isinstance(generator.target, ast.Name) and not isinstance(node, ast.DictComp)):
+                            variable = generator.target.id
+                            index = Value(('__display_index',), lambda p: p['__display_index'], variable)
+                            child = dict(row); child[variable] = index
+                            content = self.expression(node.elt, child)
+                            label = lambda value: value.description if isinstance(value, Value) else str(value)
+                            rule = variable + ' = ' + label(iterable.start) + ', ' + label(iterable.start) + ' + ' + label(iterable.step) + ', …, before ' + label(iterable.stop)
+                            if generator.ifs:
+                                rule += '; keep only ' + ' and '.join(self.label(condition, child, ()) for condition in generator.ifs)
+                            native = self.native(node, row)
+                            return GeneratedSequence(native.names, lambda p: tuple(native.get(p)), 'ordered sequence', content, rule)
+                        if isinstance(iterable, (LetterSet, NamedSequence)) and isinstance(generator.target, ast.Name) and not isinstance(node, ast.DictComp):
+                            return self.comprehension_pattern(node, env)
                         if isinstance(iterable, SequenceValue) and len(node.generators) == 1 and not generator.ifs and not isinstance(node, ast.DictComp):
                             lower, upper = iterable.length_range
                             entries = []
@@ -413,21 +798,57 @@ class Interpreter:
                         self.assign(generator.target, item, child)
                         conditions = [self.expression(c, child) for c in generator.ifs]
                         if any(isinstance(c, Value) for c in conditions):
-                            return self.native(node, env)
+                            return self.comprehension_pattern(node, env) if not isinstance(node, ast.DictComp) else self.native(node, env)
                         if all(conditions): next_rows.append(child)
                 rows = next_rows
             if isinstance(node, ast.DictComp):
                 return {self.expression(node.key, row): self.expression(node.value, row) for row in rows}
             items = [self.expression(node.elt, row) for row in rows]
             return tuple(items) if isinstance(node, ast.GeneratorExp) else items
+        if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mult):
+            left, right = self.expression(node.left, env), self.expression(node.right, env)
+            if isinstance(right, (int, Value)):
+                if isinstance(left, (list, tuple)) and len(left) == 1:
+                    item = left[0]
+                    return RepeatedSequence(dependencies((item, right)),
+                        lambda p: [resolve(item, p)] * resolve(right, p), 'repeated terms', item, right)
+                if isinstance(left, (StringValue, Text, str)) and dependencies((left, right)):
+                    item_math = self.symbolic_math(text(left))
+                    count_math = self.symbolic_math(text(right))
+                    if '$' not in item_math:
+                        return RepeatedText(dependencies((left, right)), lambda p: resolve(left, p) * resolve(right, p),
+                            'repeated characters', r'\underbrace{' + item_math + r'\cdots ' + item_math + '}_{' + count_math + r'\text{ repetitions}}')
         if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mod):
             left = self.expression(node.left, env)
             if isinstance(left, str):
                 right = self.expression(node.right, env)
                 return self.percent(left, right)
         if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+            sign, magnitude = node.left, node.right
+            if (isinstance(sign, ast.IfExp) and isinstance(sign.test, ast.Compare)
+                    and len(sign.test.ops) == 1 and isinstance(sign.test.ops[0], ast.Gt)
+                    and isinstance(sign.test.comparators[0], ast.Constant) and sign.test.comparators[0].value == 0
+                    and isinstance(sign.body, ast.Constant) and sign.body.value == '+'
+                    and isinstance(sign.orelse, ast.Constant) and sign.orelse.value == '-'
+                    and isinstance(magnitude, ast.Call) and isinstance(magnitude.func, ast.Name) and magnitude.func.id == 'str'
+                    and len(magnitude.args) == 1 and isinstance(magnitude.args[0], ast.Call)
+                    and isinstance(magnitude.args[0].func, ast.Name) and magnitude.args[0].func.id == 'abs'
+                    and len(magnitude.args[0].args) == 1
+                    and ast.dump(magnitude.args[0].args[0]) == ast.dump(sign.test.left)):
+                value = self.expression(sign.test.left, env)
+                if isinstance(value, Value):
+                    native = self.native(node, env)
+                    mathematical = symbolic_tex(value.description)
+                    if mathematical:
+                        return MathValue(native.names, native.evaluate, '+' + value.description, '+' + mathematical)
             left, right = self.expression(node.left, env), self.expression(node.right, env)
-            if isinstance(left, (Text, str)) or isinstance(right, (Text, str)):
+            if isinstance(left, NamedSequence) and isinstance(right, NamedSequence):
+                return NamedSequence(dependencies((left, right)), lambda p: left.get(p) + right.get(p),
+                                     left.description + ', followed by ' + right.description)
+            if isinstance(left, LetterSet) and isinstance(right, LetterSet):
+                return LetterSet(dependencies((left, right)), lambda p: left.get(p) + right.get(p),
+                                 left.description + ' and ' + right.description)
+            if isinstance(left, (Text, str, StringValue, MathText)) or isinstance(right, (Text, str, StringValue, MathText)):
                 return concatenate(left, right)
             if not dependencies((left, right)):
                 return left + right
@@ -445,6 +866,16 @@ class Interpreter:
             return {self.expression(k, env): self.expression(v, env) for k, v in zip(node.keys, node.values)}
         if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
             receiver = self.expression(node.func.value, env)
+            if isinstance(receiver, dict) and node.func.attr == 'get' and len(node.args) in (1,2) and not node.keywords:
+                key = self.expression(node.args[0], env)
+                default = self.expression(node.args[1], env) if len(node.args) == 2 else None
+                if not dependencies(key): return receiver.get(key, default)
+                if not dependencies(receiver):
+                    description = key.description + ': ' + '; '.join(str(value) + ' → ' + str(content) for value,content in receiver.items())
+                    description += '; otherwise ' + (default.description if isinstance(default,Value) else str(default))
+                    return Value(dependencies((key,default)), lambda p: receiver.get(resolve(key,p),resolve(default,p)), description)
+            if isinstance(receiver, dict) and node.func.attr in ('values', 'items', 'keys') and not node.args and not node.keywords:
+                return tuple(getattr(receiver, node.func.attr)())
             if isinstance(receiver, Text) and not receiver.names:
                 receiver = receiver.get({})
             if isinstance(receiver, Value) and isinstance(node.func.value, ast.Name) and node.func.attr in ('append', 'extend', 'insert', 'update'):
@@ -474,6 +905,30 @@ class Interpreter:
                 return [*chunks, concatenate(*current)]
             if isinstance(receiver, str) and node.func.attr == 'join':
                 sequence = self.expression(node.args[0], env)
+                if isinstance(sequence, RepeatedSequence):
+                    item_math = self.symbolic_math(text(sequence.item))
+                    count_math = self.symbolic_math(text(sequence.count))
+                    if receiver.strip() in ('+', r'\cdot', r'\times', '*') and '$' not in item_math:
+                        sign = r'\cdot' if receiver.strip() == '*' else receiver.strip()
+                        formula = r'\underbrace{' + item_math + sign + r'\cdots' + sign + item_math + '}_{' + count_math + r'\text{ terms}}'
+                        return MathValue(sequence.names, lambda p: receiver.join(sequence.get(p)), 'repeated terms', formula)
+                if isinstance(sequence, GeneratedSequence):
+                    body = self.symbolic_math(text(sequence.element))
+                    if '$' not in body:
+                        rule = text_tex(sequence.rule)
+                        if receiver.strip() in ('+', r'\cdot', r'\times', '*'):
+                            operation = r'\sum' if receiver.strip() == '+' else r'\prod'
+                            formula = operation + r'_{\substack{' + rule + r'}}\left(' + body + r'\right)'
+                        else:
+                            formula = r'\left[' + body + r'\right]_{\substack{' + rule + '}}'
+                        return MathValue(sequence.names, lambda p: receiver.join(sequence.get(p)), 'ordered sequence: ' + sequence.rule, formula)
+                if isinstance(sequence, NamedSequence):
+                    prefix = 'sum of ' if receiver.strip() == '+' else 'product of ' if receiver.strip() in ('*', r'\cdot', r'\times') else ''
+                    return Value(sequence.names, lambda p: receiver.join(sequence.get(p)), prefix + sequence.description)
+                if isinstance(sequence, LetterSet):
+                    return Value(sequence.names, lambda p: receiver.join(sequence.get(p)), sequence.description)
+                if isinstance(sequence, SequenceValue):
+                    return Value(sequence.names, lambda p: receiver.join(sequence.get(p)), 'entries of ' + sequence.description)
                 if isinstance(sequence, OptionalSequence):
                     pieces = []
                     for index, (condition, content) in enumerate(sequence.entries):
@@ -518,7 +973,7 @@ class Interpreter:
         if isinstance(node, ast.Call):
             # Value helpers within interpolation are evaluated natively above.
             # Calls forming the prose skeleton are interpreted recursively.
-            function = self.native(node.func, env)
+            function = self.expression(node.func, env) if isinstance(node.func, ast.Name) else self.native(node.func, env)
             if isinstance(function, Value):
                 return self.native(node, env)
             args = []
@@ -541,7 +996,9 @@ class Interpreter:
             condition = self.native(node.test, env)
             if not isinstance(condition, Value):
                 return self.expression(node.body if condition else node.orelse, env)
-            return self.merge(condition, self.expression(node.body, env), self.expression(node.orelse, env))
+            yes, no = self.expression(node.body, env), self.expression(node.orelse, env)
+            spelling = self.equality_spelling(node.test, env, condition, yes, no)
+            return spelling if spelling is not None else self.merge(condition, yes, no)
         return self.native(node, env)
 
     def percent(self, source, values):
@@ -604,17 +1061,69 @@ class Interpreter:
     def symbolic_math(self, rendered):
         def label(value):
             if getattr(value, 'math', None): return value.math
-            escaped = value.description.replace('\\', r'\textbackslash{}').replace('_', r'\_').replace('{', r'\{').replace('}', r'\}')
-            return r'\text{' + escaped + '}'
-        return ''.join(label(part) if isinstance(part, Value) else part for part in rendered.parts)
+            return text_tex(value.description)
+        return ''.join(label(part) if isinstance(part, Value) else str(part) for part in rendered.parts)
 
     def math_label(self, rendered):
         result = ''.join(part.description if isinstance(part, Value) else part for part in rendered.parts)
-        return result if len(result) <= 140 else 'expression(' + ', '.join(rendered.names) + ')'
+        return result
+
+    def equality_spelling(self, test, env, condition, yes, no):
+        """Prove a literal special spelling agrees at its declared equality.
+
+        E.g. the source writes x^4 at its original value and x^{exponent}
+        otherwise. The equality literals fix every input; only redundant braces
+        around one exponent character are normalized, not sampled mathematics.
+        """
+        if not (isinstance(test, ast.Compare) and len(test.ops) == 1 and isinstance(test.ops[0], ast.Eq)):
+            return None
+        try:
+            constants = ast.literal_eval(test.comparators[0])
+            values = self.expression(test.left, env)
+        except (ValueError, TypeError, KeyError):
+            return None
+        params = {}
+        def bind(value, constant):
+            if isinstance(value, (tuple, list)) and isinstance(constant, (tuple, list)) and len(value) == len(constant):
+                return all(bind(a, b) for a, b in zip(value, constant))
+            if isinstance(value, Value) and len(value.names) == 1 and value.description == value.names[0]:
+                params[value.names[0]] = constant
+                return value.get(params) == constant
+            return not dependencies(value) and value == constant
+        if not bind(values, constants): return None
+        names = dependencies((condition, yes, no))
+        if set(params) != set(names): return None
+        # Exactly one branch is the general expression, the other its literal
+        # original spelling. Genuinely distinct conditional formulas stay cases.
+        candidates = [branch for branch in (yes, no) if set(dependencies(branch)) == set(names)]
+        if len(candidates) != 1: return None
+        def normalize(value):
+            value = str(resolve(value, params))
+            if '$' in value or r'\text' in value: return None
+            value = re.sub(r'([_^])\{([A-Za-z0-9])\}', r'\1\2', value).replace(' ', '')
+            # TeX's two single-token fraction arguments are exactly equivalent
+            # to braced atoms; this runs only at the source-declared equality.
+            return re.sub(r'\\frac(?:\{([A-Za-z0-9])\}|([A-Za-z0-9]))(?:\{([A-Za-z0-9])\}|([A-Za-z0-9]))',
+                          lambda m: r'\frac{' + (m[1] or m[2]) + '}{' + (m[3] or m[4]) + '}', value)
+        a, b = normalize(yes), normalize(no)
+        if a is None or a != b: return None
+        return MathValue(names, lambda p: resolve(yes if condition.get(p) else no, p),
+                         'formula(' + ', '.join(names) + ')', self.symbolic_math(text(candidates[0])))
 
     def merge(self, condition, yes, no):
+        if isinstance(yes, (list, tuple)) and isinstance(no, (list, tuple)):
+            merged = [self.merge(condition, a, b) if a is not b else a
+                      for a, b in itertools.zip_longest(yes, no, fillvalue='')]
+            return tuple(merged) if isinstance(yes, tuple) else merged
+        if isinstance(yes, dict) and isinstance(no, dict) and yes.keys() == no.keys():
+            return {key: self.merge(condition, yes[key], no[key]) if yes[key] is not no[key] else yes[key] for key in yes}
         if not dependencies((yes, no)) and type(yes) is type(no) and yes == no:
             return yes
+        if isinstance(yes, (str, int, float)) and isinstance(no, (str, int, float)) and not any(mark in str(yes) + str(no) for mark in ('$' , r'\(', r'\[')):
+            first, second = str(yes).strip(), str(no).strip()
+            description = ((first or 'nothing') + ' when ' + condition.description
+                           + ('; ' + second + ' otherwise' if second else '; omitted otherwise'))
+            return Value(condition.names, lambda p: yes if condition.get(p) else no, description)
         if isinstance(yes, (Text, str)) or isinstance(no, (Text, str)):
             source_a, source_b = text(yes), text(no)
             prose = lambda value: len(re.findall(r'[A-Za-z]{2,}', ''.join(part for part in value.parts if isinstance(part, str)))) >= 6
@@ -663,18 +1172,24 @@ class Interpreter:
                 a, b = list(source_a.parts), list(source_b.parts)
             names = dependencies((condition, Text(tuple(a)), Text(tuple(b))))
             candidates = [self.math_label(Text(tuple(branch))) for branch in (a, b)]
-            label = next((candidate for candidate in candidates if any(mark in candidate for mark in ('!', '\\cdots', '^', '='))),
-                         'expression(' + ', '.join(names) + ')')
-            selected = next((branch for branch, candidate in zip((a, b), candidates) if candidate == label), None)
-            if selected is not None and any(mark in label for mark in ('!', '\\cdots', '^', '\\frac', '\\sqrt')):
+            choices = [(branch, candidate) for branch, candidate in zip((a, b), candidates)
+                       if dependencies(Text(tuple(branch)))
+                       and (any(getattr(part, 'math', None) for part in branch) or any(mark in candidate for mark in ('!', '\\cdots', '^', '=')))]
+            alternative = (self.math_label(Text(tuple(a))) or 'omitted') + ' when ' + condition.description + '; ' + (self.math_label(Text(tuple(b))) or 'omitted') + ' otherwise'
+            selected, label = max(choices, key=lambda item: len(dependencies(Text(tuple(item[0]))))) if choices else (None, alternative)
+            if selected is not None and (any(getattr(part, 'math', None) for part in selected) or any(mark in label for mark in ('!', '\\cdots', '^', '\\frac', '\\sqrt'))):
                 value = MathValue(names, lambda p: Text(tuple(a if condition.get(p) else b)).get(p),
                                   'formula(' + ', '.join(names) + ')', self.symbolic_math(Text(tuple(selected))))
             else:
                 value = Value(names, lambda p: Text(tuple(a if condition.get(p) else b)).get(p), label)
             return concatenate(*before, value, *after)
         names = dependencies((condition, yes, no))
+        def describe_choice(value):
+            if isinstance(value, Value): return value.description
+            if isinstance(value, Text): return self.math_label(value)
+            return str(value)
         return Value(names, lambda p: resolve(yes if condition.get(p) else no, p),
-                     'expression(' + ', '.join(names) + ')')
+                     describe_choice(yes) + ' when ' + condition.description + '; ' + describe_choice(no) + ' otherwise')
 
     def conditional_text(self, condition, yes, no):
         parts = []
@@ -725,7 +1240,8 @@ class Interpreter:
                     continue
                 forks, results = [], []
                 for branch in (statement.body, statement.orelse):
-                    fork = dict(env)
+                    fork = {key: list(value) if isinstance(value, list) else dict(value) if isinstance(value, dict) else value
+                            for key, value in env.items()}
                     try:
                         self.block(branch, fork)
                     except Returned as result:
@@ -754,7 +1270,7 @@ class Interpreter:
                 self.assign(statement.target, self.expression(equivalent, env), env)
             elif isinstance(statement, ast.For):
                 iterable = self.expression(statement.iter, env)
-                deferred = any(isinstance(item, ast.If) or isinstance(item, ast.AugAssign) and not isinstance(item.target, ast.Name)
+                deferred = any(isinstance(item, (ast.Continue, ast.Break)) or isinstance(item, ast.AugAssign) and not isinstance(item.target, ast.Name)
                                for child in statement.body for item in ast.walk(child))
                 if not isinstance(iterable, Value) and not deferred:
                     for value in iterable:
@@ -764,7 +1280,8 @@ class Interpreter:
                 else:
                     self.deferred_block(statement, env)
             elif isinstance(statement, ast.FunctionDef):
-                self.deferred_block(statement, env)
+                loaded = self.free_identifiers(statement)
+                env[statement.name] = LocalDisplayFunction(statement, {key: value for key, value in env.items() if key in loaded})
             elif isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Constant):
                 continue
             elif isinstance(statement, ast.Expr) and isinstance(statement.value, ast.Call):
@@ -812,7 +1329,69 @@ def source_expression_parts(template):
     if not isinstance(rendered, Text):
         raise ValueError('Renderer did not expose a text skeleton')
     rendered = full_conditional_cases(rendered, template.parameters)
-    return tuple(Field(part) if isinstance(part, Value) else str(part) for part in rendered.parts)
+    parts = tuple(Field(part) if isinstance(part, Value) else str(part) for part in rendered.parts)
+    return parts
+
+
+def source_sequence_meaning(template, parts):
+    """Expose native compact sequence displays without changing their spelling."""
+    from .source_bindings import native_display_binding
+    binding = native_display_binding(template)
+    function = binding.function if binding else template.render
+    identity = getattr(function, '__module__', ''), getattr(function, '__qualname__', '')
+    prefix = 'template_dataset.families.'
+    expected = None
+    if identity == (prefix + 'word_problems.expressions', 'render'):
+        # The source chooses between n/d and n solely to omit a unit
+        # denominator. Its quantity is n/d for the entire declared domain.
+        output = []
+        for part in parts:
+            if not isinstance(part,str):
+                numerator = next((name for name in part.names if name.startswith('numerator_')),None)
+                denominator = next((name for name in part.names if name.startswith('denominator_')),None)
+                if (numerator and denominator and numerator.split('_')[-1] == denominator.split('_')[-1]
+                        and set(part.names) == {numerator,denominator}):
+                    formula = r'\frac{' + text_tex(numerator) + '}{' + text_tex(denominator) + '}'
+                    part = Field(MathValue(part.names,part.fill,'fraction',formula))
+            output.append(part)
+        return tuple(output)
+    if identity == (prefix + 'algebra.symmetric_identities', '_canceling_cubic.<locals>.render'):
+        output, matched = [], 0
+        for part in parts:
+            if (not isinstance(part,str) and tuple(part.names) == ('equation_scale',)
+                    and part.label() == 'equation_scale when equation_scale≠1; omitted otherwise'):
+                part = Field(MathValue(part.names,part.fill,'equation_scale',text_tex('equation_scale')))
+                matched += 1
+            output.append(part)
+        if matched != 1: raise ValueError('Native unit coefficient display contract changed')
+        return tuple(output)
+    if (identity == (prefix + 'algebra.progressions' , '<lambda>') and set(template.parameters) == {'base','terms'}
+            and any(isinstance(value,str) and 'Find the sum as a common fraction.' in value for value in function.__code__.co_consts)):
+        # The source concatenates signed reciprocal powers in increasing order.
+        # Its mathematical operation is a sum, not an ordered-list value.
+        formula = r'\sum_{i=1}^{\text{terms}}\frac{(-1)^{i-1}}{\text{base}^{i}}'
+        fields = [part for part in parts if not isinstance(part,str)]
+        if len(fields) != 1 or set(fields[0].names) != {'base','terms'}:
+            raise ValueError('Native alternating-sum contract changed')
+        return tuple(Field(MathValue(part.names,part.fill,'alternating sum',formula)) if not isinstance(part,str) else part for part in parts)
+    if identity == (prefix + 'arithmetic.rounding_and_integer_arithmetic', 'falling_factorial_render'):
+        expected = [('join(start_offset)', r'\prod_{j=0}^{\text{start\_offset}}(a-j)')]
+    elif identity == (prefix + 'algebra.polynomial_operations', '_consecutive_factors.<locals>.render'):
+        factor = r'(x+\text{start}+j\,\text{step})'
+        expected = [('join(length, start, step)', r'\prod_{j=0}^{2}' + factor),
+                    ('join(length, start, step)', r'\prod_{j=\text{length}-2}^{\text{length}-1}' + factor)]
+    elif identity == (prefix + 'precalculus.geometric_and_trigonometric_invariants', 'frame_render'):
+        expected = [('join(vectors)', r'\left((\text{vectors}_{3i+1},\text{vectors}_{3i+2},\text{vectors}_{3i+3})\right)_{i=0}^{\operatorname{length}(\text{vectors})/3-1}')]
+    if expected is None: return parts
+    result, index = [], 0
+    for part in parts:
+        if index < len(expected) and not isinstance(part, str) and part.label() == expected[index][0]:
+            formula = expected[index][1]
+            part = Field(MathValue(part.names, part.fill, 'sequence', formula))
+            index += 1
+        result.append(part)
+    if index != len(expected): raise ValueError('Native sequence display contract changed')
+    return tuple(result)
 
 
 def full_conditional_cases(rendered, domains):

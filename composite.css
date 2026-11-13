@@ -9,7 +9,7 @@
 .tree-card { padding: 25px 28px 16px; }
 .tree-card .section-heading > .metadata { margin-left: auto; }
 .root-result { display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px; margin-left: 15px; color: var(--accent); }
-.root-result > span { font-size: .76rem; }
+.root-result > span { font-size: 1rem; }
 .root-result strong { max-width: 100%; font: 600 1.4rem ui-monospace, monospace; overflow-wrap: anywhere; }
 .tree-viewport { overflow: auto; max-height: 590px; margin-top: 19px; border: 1px solid #edf0ee; border-radius: 12px; background: radial-gradient(#dce6df .7px, transparent .7px) #fafcfb; background-size: 18px 18px; }
 .tree-viewport svg { display: block; min-width: 100%; }

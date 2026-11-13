@@ -29,7 +29,7 @@ class FrontendErrorStateTests(unittest.TestCase):
 
     def run_case(self, script):
         with static_origin() as server:
-            return run_browser(self.runner, server.url + "?id=prealgebra/test/11", FAULT_INJECTION + script)
+            return run_browser(self.runner, server.url + "?id=prealgebra/test/11", FAULT_INJECTION + 'await selectAtomic("prealgebra/test/11");\n' + script)
 
     def test_failed_template_selection_can_fill_current_task_without_reselection(self):
         output = self.run_case(r'''
@@ -38,7 +38,9 @@ class FrontendErrorStateTests(unittest.TestCase):
           await until(idleAtomic, "initial filled task");
           const previousAnswer = $("atomic-answer-value").textContent;
           const previous = $("atomic-problem-id").value;
-          const chosen = [...$("atomic-problem-id").options].find(option => option.value !== previous).value;
+          // Filter navigation may already have loaded the first option. Pick an
+          // untouched last option so the injected API failure is actually issued.
+          const chosen = [...$("atomic-problem-id").options].reverse().find(option => option.value && option.value !== previous).value;
           failNextPath = "/api/template";
           change("atomic-problem-id", chosen);
           await until(() => !$("atomic-catalogue-controls").disabled && $("atomic-status").classList.contains("error"), "one-off template failure", {allowError: true});

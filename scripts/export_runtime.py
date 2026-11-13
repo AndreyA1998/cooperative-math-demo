@@ -24,6 +24,7 @@ def export_runtime(source, public=ROOT):
     paths.extend(source / 'composite_dataset' / name for name in (
         '__init__.py', '__main__.py', 'schema.py', 'profiles.py', 'smart_adapters.py',
         'rendering.py', 'runtime.py', 'diagnostics.py', 'topology.py', 'patterns.py',
+        'fresh_profiles.py',
         'operators.py', 'serialization.py', 'data/profiles.json.gz'))
     entries = {path.relative_to(source).as_posix(): path.read_bytes() for path in paths}
     for name in ('__init__.py', 'api.py', 'presentation.py',

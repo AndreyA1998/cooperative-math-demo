@@ -14,7 +14,7 @@ class OperatorNotationTests(unittest.TestCase):
 
     def test_user_case_is_floor_of_half_the_numerator(self):
         formula, notes = _operator_math(self.modular(1, 0, 2), 'R5')
-        self.assertIn(r'\left\lfloor\frac{\text{числитель}\left(\operatorname{Ans}(5)\right)}{2}\right\rfloor', formula)
+        self.assertIn(r'\left\lfloor\frac{\operatorname{numerator}\left(\operatorname{Ans}(5)\right)}{2}\right\rfloor', formula)
         self.assertNotIn('знаменатель', formula)
         self.assertNotIn('N_{', formula)
         self.assertNotIn('R_{', formula)
@@ -23,7 +23,7 @@ class OperatorNotationTests(unittest.TestCase):
 
     def test_integer_expression_needs_no_floor_and_keeps_negative_signs(self):
         formula, notes = _operator_math(self.modular(-1, 2, 1), 'R5')
-        self.assertIn(r'\operatorname{mod}\left(-\text{числитель}\left(\operatorname{Ans}(5)\right)+2\text{знаменатель}\left(\operatorname{Ans}(5)\right),2\right)<1', formula)
+        self.assertIn(r'\operatorname{mod}\left(-\operatorname{numerator}\left(\operatorname{Ans}(5)\right)+2\operatorname{denominator}\left(\operatorname{Ans}(5)\right),2\right)<1', formula)
         self.assertNotIn('floor', formula)
         self.assertFalse(any('округление вниз' in note for note in notes))
 

@@ -5,13 +5,12 @@ import unittest
 from unittest.mock import patch
 from urllib.parse import urlencode
 
-from support import ensure_runtime
+from support import ensure_runtime, large_integer_schema
 
 ensure_runtime()
 
 from template_dataset import solve as atomic_solve
 from composite_dataset import build_schema, instantiate, solve
-from composite_dataset.profiles import get_catalogue
 from template_dataset.registry import registry
 from math_demo.api import dispatch_json
 
@@ -188,16 +187,8 @@ class CompositeApiTests(unittest.TestCase):
         self.assertIn("size limit", json.loads(raw)["error"])
 
     def test_raw_json_schema_preserves_integers_larger_than_javascript_safe_range(self):
-        catalogue = {key: deepcopy(get_catalogue()[key]) for key in
-                     {node["source_id"] for node in self.schema["nodes"]}}
-        for profiles in catalogue.values():
-            for profile in profiles:
-                for name in ("numerator", "denominator", "divisor"):
-                    profile["classifier"][name] *= 2**100 + 1
-        with patch("composite_dataset.profiles.get_catalogue", return_value=catalogue):
-            status, raw_schema = dispatch_json("POST", BUILD, body=json.dumps(STRUCTURE))
-        self.assertEqual(status, 200)
-        expected = json.loads(raw_schema)
+        expected = large_integer_schema(self.schema)
+        raw_schema = json.dumps(expected, ensure_ascii=False, separators=(",", ":"))
         divisor = expected["nodes"][0]["profile"]["classifier"]["divisor"]
         self.assertGreater(divisor, 2**53)
         token = '"divisor":' + str(divisor)

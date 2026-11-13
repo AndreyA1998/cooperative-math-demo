@@ -40,6 +40,7 @@ class PublicExportTests(unittest.TestCase):
             'composite_dataset/smart_adapters.py', 'composite_dataset/rendering.py',
             'composite_dataset/runtime.py', 'composite_dataset/diagnostics.py',
             'composite_dataset/topology.py', 'composite_dataset/patterns.py',
+            'composite_dataset/fresh_profiles.py',
             'composite_dataset/operators.py', 'composite_dataset/serialization.py',
             'composite_dataset/data/profiles.json.gz',
         ]

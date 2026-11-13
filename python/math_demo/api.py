@@ -62,6 +62,31 @@ def _seed(text):
     return int(text)
 
 
+def plain_template_text(segments):
+    """Export complete symbolic TeX, including formulas occurring in prose."""
+    output, delimiter, environments = [], None, []
+    tokens = re.compile(r'(?<!\\)\$|\\[()[\]]|\\(?:begin|end)\{([A-Za-z]+\*?)\}')
+    math_environments = {'align', 'align*', 'aligned', 'alignat', 'alignat*', 'equation', 'equation*',
+                         'gather', 'gather*', 'gathered', 'multline', 'multline*', 'split',
+                         'array', 'matrix', 'pmatrix', 'bmatrix', 'vmatrix', 'Vmatrix', 'cases'}
+    for segment in segments:
+        formula = segment.get('symbolic_math')
+        content = formula if formula is not None else segment['text']
+        if formula is not None and delimiter is None and not environments:
+            output.append('$' + content + '$')
+            continue
+        output.append(content)
+        for token in tokens.finditer(content):
+            value, environment = token[0], token[1]
+            if environment in math_environments:
+                if value.startswith(r'\begin'): environments.append(environment)
+                elif environments: environments.pop()
+            elif value == '$': delimiter = None if delimiter == '$' else '$'
+            elif value in (r'\(', r'\['): delimiter = value
+            elif value in (r'\)', r'\]'): delimiter = None
+    return ''.join(output)
+
+
 def atomic_response(path, query):
     try:
         fields = parse_qs(query, keep_blank_values=True, strict_parsing=True,
@@ -80,7 +105,7 @@ def atomic_response(path, query):
         return describe(problem_id)
     if path == "/api/template":
         shown = atomic_presentation(problem_id)
-        problem_template = ''.join(part.get('symbolic_math', part['text']) for part in shown['segments'])
+        problem_template = plain_template_text(shown['segments'])
         if shown['notes']:
             problem_template += '\n\n' + '\n'.join(shown['notes'])
         return dict(describe(problem_id), presentation=shown, problem_template=problem_template)

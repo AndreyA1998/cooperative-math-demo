@@ -1,19 +1,16 @@
 """Actual browser + Pyodide integration against a static repository subpath."""
-from copy import deepcopy
 from hashlib import sha256
 import json
 import tempfile
 import unittest
 
 from support import (
-    HAS_BROWSER, MOUNT, prepare_browser, ensure_runtime, run_browser, static_origin,
+    HAS_BROWSER, MOUNT, prepare_browser, ensure_runtime, run_browser, static_origin, large_integer_schema,
 )
 
 ensure_runtime()
 
 from math_demo.api import dispatch_json
-from composite_dataset import build_schema
-from composite_dataset.profiles import get_catalogue
 from template_dataset.registry import registry
 
 MAX_SEED = "18446744073709551615"
@@ -48,6 +45,7 @@ class BrowserRuntimeTests(unittest.TestCase):
           await until(idleAtomic, "catalogue ready");
           check($("atomic-problem-card").hidden && $("atomic-problem-id").value === "", "Default page selected a task");
           check($("atomic-generate").disabled, "Unselected task can be filled");
+          check(!new URL(location.href).searchParams.has("id") && !new URL(location.href).searchParams.has("seed"), "Old selection remained in the startup URL");
           for (const prefix of ["atomic", "composite-structure", "composite-parameter"]) {
             check(!$(prefix + "-seed-mode").checked && $(prefix + "-seed-setting").hidden, "Seed mode enabled by default: " + prefix);
           }
@@ -64,7 +62,7 @@ class BrowserRuntimeTests(unittest.TestCase):
           $("composite-tab").click(); $("atomic-tab").click();
           check($("atomic-problem-text").textContent === text, "Tab switch discarded selected template");
           return "OK: empty initial state, explicit selection, seeds opt-in";
-        ''')
+        ''', suffix="?id=counting_and_probability/train/523&seed=42")
 
     def test_actual_wasm_matches_native_and_preserves_raw_large_schema_integers(self):
         structure = {"depth": 3, "width": 4, "seed": "42", "split": "train",
@@ -72,13 +70,8 @@ class BrowserRuntimeTests(unittest.TestCase):
         body = json.dumps(structure)
         expected_build = native("POST", "/api/composite/build", body=body)
         schema = json.loads(expected_build)
-        chosen = {node["source_id"] for node in schema["nodes"]}
-        catalogue = {key: deepcopy(get_catalogue()[key]) for key in chosen}
-        for profiles in catalogue.values():
-            for profile in profiles:
-                for name in ("numerator", "denominator", "divisor"):
-                    profile["classifier"][name] *= 2**100 + 1
-        large = build_schema(3, 4, 42, catalogue=catalogue)
+        large = large_integer_schema(schema)
+        self.assertGreater(large["nodes"][0]["profile"]["classifier"]["divisor"], 2**53)
         raw_large = json.dumps(large, ensure_ascii=False, separators=(",", ":"))
         large_body = '{"schema":' + raw_large + ',"seed":"' + MAX_SEED + '"}'
         ids = sorted(registry())
@@ -127,10 +120,14 @@ class BrowserRuntimeTests(unittest.TestCase):
         expected = json.loads(native("GET", "/api/generate", "id=algebra%2Ftrain%2F1316&seed=0"))["problem"]
         bare_expected = json.loads(native("GET", "/api/template", "id=prealgebra%2Ftest%2F11"))["problem_template"]
         self.run_case("const expectedAtomicText = " + json.dumps(expected) + "; const expectedAtomicTemplate = " + json.dumps(bare_expected) + r''';
-          await until(() => idleAtomic() && !$("atomic-problem-text").hidden, "shared atomic link");
-          check($("atomic-seed-mode").checked && !$("atomic-seed-setting").hidden, "Share link lost seed mode");
-          check($("atomic-seed").value === "0", "Share link lost exact seed");
-          check($("atomic-problem-id").value === "algebra/train/1316", "Share link lost selection");
+          await until(idleAtomic, "empty initial page");
+          check($("atomic-problem-card").hidden && !$("atomic-seed-mode").checked, "Old URL restored a task or seed");
+          await selectAtomic("algebra/train/1316");
+          $("atomic-seed-mode").click(); $("atomic-seed").value = "0";
+          $("atomic-generate").click(); await until(idleAtomic, "explicit seed generation");
+          check($("atomic-seed-mode").checked && !$("atomic-seed-setting").hidden, "Explicit selection lost seed mode");
+          check($("atomic-seed").value === "0", "Explicit selection lost exact seed");
+          check($("atomic-problem-id").value === "algebra/train/1316", "Explicit selection lost task");
           check($("atomic-params").textContent.includes("99999999999999999999999999999999999999"),
                 "Large native parameter lost decimal digits");
           check(!$("atomic-answer").hidden && $("atomic-answer").tagName !== "DETAILS",
@@ -325,7 +322,7 @@ class BrowserRuntimeTests(unittest.TestCase):
           check(!notice.hidden && /\b300\b/.test(notice.textContent) && /\b1\b/.test(notice.textContent)
             && /\b128\b/.test(notice.textContent), "Reduced width notice omits requested, actual or technical limit");
           check(!$("composite-parameter-controls").disabled, "Reduced schema cannot generate variants");
-          check($("composite-schema-meta").textContent.includes("ширина основания: 1"), "Summary reports requested rather than applied width");
+          check($("composite-schema-meta").textContent.includes("1 агент"), "Summary reports requested rather than applied width");
           $("composite-width").value = "1";
           $("composite-structure-random").click();
           await until(idleComposite, "exact width rebuild");

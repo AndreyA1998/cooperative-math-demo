@@ -79,6 +79,40 @@ class SourceBindingTests(unittest.TestCase):
         self.assertIn('1', ''.join(part for part in parts if isinstance(part, str)))
         self.assertEqual(filled(parts, template.original), template.render(template.original))
 
+    def test_source_polynomial_formulas_survive_whitespace_formatting(self):
+        for key, names in (('algebra/test/0', ('linear', 'constant')),
+                           ('algebra/test/190', ('leading', 'middle', 'constant_magnitude')),
+                           ('algebra/test/1160', ('numerator_root', 'linear', 'constant'))):
+            template = get_template(key)
+            parts = bind_source(template)
+            formulas = ' '.join(getattr(part, 'symbolic_math', '') or '' for part in parts if not isinstance(part, str))
+            with self.subTest(source=key):
+                self.assertIn('x', formulas)
+                for name in names: self.assertIn(name.replace('_', r'\_'), formulas)
+                self.assertNotRegex(formulas, r'(?:polynomial|replace|expression)\(')
+                self.assertEqual(filled(parts, template.original), template.render(template.original))
+
+    def test_alternating_sum_and_function_iterations_expose_their_operations(self):
+        template = get_template('algebra/test/1002')
+        fields = [part for part in bind_source(template) if not isinstance(part, str)]
+        for field, scale in zip(fields, ('numerator_scale', 'denominator_scale')):
+            formula = getattr(field, 'symbolic_math', '') or ''
+            self.assertIn(r'\sum_{i=1}', formula)
+            self.assertIn('terms', formula)
+            self.assertIn(scale.replace('_', r'\_'), formula)
+            self.assertIn('(-1)^{i+1}', formula)
+        template = get_template('algebra/test/1083')
+        fields = [part for part in bind_source(template) if not isinstance(part, str)]
+        iteration = next(part for part in fields if set(part.names) == {'iterations', 'argument'})
+        formula = getattr(iteration, 'symbolic_math', '') or ''
+        self.assertIn(r'\circ', formula)
+        self.assertIn('iterations', formula)
+        self.assertIn('argument', formula)
+        self.assertNotRegex(formula, r'(?:value|join|expression)\(')
+        for seed in (0, 17, 2**64-1):
+            parameters = generate('algebra/test/1083', seed)['parameters']
+            self.assertEqual(filled(bind_source(template), parameters), template.render(parameters))
+
     def test_binding_metadata_calls_only_the_native_display_function(self):
         for key in WRAPPER_IDS:
             template = get_template(key)
