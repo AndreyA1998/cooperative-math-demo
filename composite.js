@@ -8,6 +8,7 @@ const parameterControls = byId("parameter-controls");
 const formatNumber = new Intl.NumberFormat("ru");
 let currentSchema;
 let currentInstance;
+let currentVariantRaw;
 let templatePresentation;
 let presentationRevision = 0;
 function showStatus(message, error = false) {
@@ -28,11 +29,16 @@ function svgElement(tag, attributes = {}, text = "") {
   node.textContent = text;
   return node;
 }
-const nodeWidth = 172;
-const nodeHeight = 74;
+const nodeWidth = 200;
+const nodeHeight = 104;
 const columnGap = 24;
-const rowHeight = 160;
+const rowHeight = 190;
 const inset = 28;
+const subjectNames = { algebra: "Алгебра", counting_and_probability: "Комбинаторика и вероятность", geometry: "Геометрия", intermediate_algebra: "Продвинутая алгебра", number_theory: "Теория чисел", prealgebra: "Начальная алгебра", precalculus: "Предварительный курс анализа" };
+function origin(sourceId) {
+  const [subject, split, number] = sourceId.split("/");
+  return { subject: subjectNames[subject] ?? subject, detail: "№ " + number + " · " + split };
+}
 function layoutTree(schema) {
   const nodes = new Map(schema.nodes.map((node) => [node.node_id, node]));
   const positions = new Map();
@@ -81,10 +87,13 @@ function renderTree(schema, presentation = null) {
       }
     }
     const root = node.node_id === schema.root_id;
-    const card = svgElement("g", { transform: `translate(${at.x - nodeWidth / 2} ${at.y})`, class: "tree-task", "data-node": node.node_id, tabindex: 0, role: "button", "aria-label": "Задача " + node.number + (display?.answer != null ? ", ответ " + display.answer : "") });
+    const source = origin(node.source_id);
+    const card = svgElement("g", { transform: `translate(${at.x - nodeWidth / 2} ${at.y})`, class: "tree-task", "data-node": node.node_id, tabindex: 0, role: "button", "aria-label": "Задача " + node.number + ", " + source.subject + ", " + source.detail + (display?.answer != null ? ", ответ " + display.answer : "") });
     card.append(svgElement("rect", { width: nodeWidth, height: nodeHeight, rx: 13, class: "tree-node" + (root ? " tree-root" : "") }));
-    card.append(svgElement("text", { x: 16, y: 27, class: "tree-label" }, String(node.number)));
-    card.append(svgElement("text", { x: 16, y: 53, class: display?.answer != null ? "tree-node-answer" : "tree-empty-answer", ...(String(display?.answer ?? "").length > 18 ? { textLength: nodeWidth - 32, lengthAdjust: "spacingAndGlyphs" } : {}) }, display?.answer ?? "—"));
+    card.append(svgElement("text", { x: 16, y: 22, class: "tree-label" }, String(node.number)));
+    card.append(svgElement("text", { x: 16, y: 41, class: "tree-origin" }, source.subject));
+    card.append(svgElement("text", { x: 16, y: 57, class: "tree-origin" }, source.detail));
+    card.append(svgElement("text", { x: 16, y: 85, class: display?.answer != null ? "tree-node-answer" : "tree-empty-answer", ...(String(display?.answer ?? "").length > 18 ? { textLength: nodeWidth - 32, lengthAdjust: "spacingAndGlyphs" } : {}) }, display?.answer ?? "—"));
     const activate = () => document.querySelector(`[data-card-node="${node.node_id}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
     card.addEventListener("click", activate);
     card.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); activate(); } });
@@ -102,6 +111,8 @@ function renderPresentation(presentation) {
     const header = element("header", "subproblem-heading");
     header.append(element("span", "task-number", String(node.number)));
     header.append(element("h3", "", "Задача " + node.number));
+    const source = origin(node.source_id);
+    header.append(element("span", "subproblem-origin", source.subject + " · " + source.detail));
     if (node.answer != null) {
       const answer = element("div", "subproblem-answer");
       answer.append(element("span", "", "Ответ"), element("strong", "", node.answer));
@@ -136,21 +147,20 @@ function renderPresentation(presentation) {
     const statement = element("div", "subproblem-statement");
     pending.push(MathPresentation.render(statement, node.segments));
     card.append(statement);
-    if (node.notes.length || node.adapter) {
-      const details = element("details", "adapter-details");
-      details.append(element("summary", "", "Условия и преобразование"));
-      for (const note of node.notes) {
-        const paragraph = element("p", "subproblem-note");
-        pending.push(MathPresentation.render(paragraph, [{ kind: "text", text: note }]));
-        details.append(paragraph);
-      }
+    if (node.adapter_math?.length || node.notes.length || node.adapter) {
+      const rules = element("div", "conversion-rules");
       for (const rule of node.adapter_math ?? []) {
-        const line = element("div", "adapter-rule");
-        pending.push(MathPresentation.render(line, [{ kind: "text", text: "\\[" + rule + "\\]" }]));
-        details.append(line);
+        const line = element("div", "conversion-rule");
+        pending.push(MathPresentation.render(line, [{ kind: "text", text: "$" + rule + "$" }]));
+        rules.append(line);
       }
-      if (node.adapter && !node.adapter_math?.length) details.append(element("div", "adapter-text", node.adapter));
-      card.append(details);
+      if (node.adapter && !node.adapter_math?.length) rules.append(element("p", "conversion-note", node.adapter));
+      for (const note of node.notes) {
+        const paragraph = element("p", "conversion-note");
+        pending.push(MathPresentation.render(paragraph, [{ kind: "text", text: note }]));
+        rules.append(paragraph);
+      }
+      card.append(rules);
     }
     return card;
   });
@@ -165,14 +175,14 @@ function renderPresentation(presentation) {
 }
 function resetParameters() {
   currentInstance = undefined;
+  currentVariantRaw = undefined;
+  byId("export-schema").textContent = "Скачать шаблон";
   presentationRevision++;
   byId("mode").textContent = "Шаблон";
   byId("instance-result").hidden = true;
   byId("root-answer").textContent = "";
   byId("reset-parameters").disabled = true;
-  byId("copy-instance").disabled = true;
   byId("current-copy-status").textContent = "";
-  byId("instance-copy-status").textContent = "";
   if (currentSchema) renderTree(currentSchema.data);
   if (templatePresentation) renderPresentation(templatePresentation);
   else if (currentSchema) {
@@ -196,8 +206,6 @@ async function showSchema(schema) {
   byId("width-notice").textContent = reduced ? `Запрошена ширина ${formatNumber.format(data.requested_width)}, доступно ${formatNumber.format(data.actual_width)}. Предел демо — 128 задач в основании.` : "";
   byId("width-notice").hidden = !reduced;
   byId("reuse-notice").hidden = !(data.requested_allow_template_reuse === false && data.allow_template_reuse === true);
-  byId("template-copy-status").textContent = "";
-  byId("provenance").replaceChildren(...data.nodes.map((node) => element("p", "metadata", "№ " + node.number + " · " + node.source_id)));
   const target = byId("public-template");
   target.classList.remove("formatted-presentation");
   target.textContent = data.problem_template;
@@ -212,15 +220,15 @@ async function showSchema(schema) {
     byId("presentation-note").hidden = false;
   }
 }
-function showInstance(instance, presentation) {
+function showInstance(instance, presentation, raw) {
   currentInstance = instance;
+  currentVariantRaw = raw;
+  byId("export-schema").textContent = "Скачать задачу";
   byId("mode").textContent = "Вариант";
   byId("reset-parameters").disabled = false;
-  byId("copy-instance").disabled = false;
   byId("instance-result").hidden = false;
   byId("root-answer").textContent = instance.answer;
   byId("current-copy-status").textContent = "";
-  byId("instance-copy-status").textContent = "";
   renderTree(currentSchema.data, presentation);
   renderPresentation(presentation);
 }
@@ -256,7 +264,7 @@ byId("parameter-form").addEventListener("submit", (event) => {
   event.preventDefault();
   // Exact JSON bytes, including integers beyond the JavaScript Number range.
   const body = '{"schema":' + currentSchema.raw + ',"seed":' + JSON.stringify(seedForSubmission(parameterSeed)) + '}';
-  void submit("variant", body, ({ data }) => showInstance(data.instance, data.presentation), "Вычисляем…");
+  void submit("variant", body, ({ data, raw }) => showInstance(data.instance, data.presentation, raw), "Вычисляем…");
 });
 byId("reset-parameters").addEventListener("click", resetParameters);
 async function copyText(button, text) {
@@ -276,13 +284,17 @@ async function copyText(button, text) {
   button.parentElement.querySelector("output").textContent = copied ? "Скопировано" : "Выделите текст и скопируйте вручную.";
 }
 byId("copy-current").addEventListener("click", (event) => { void copyText(event.currentTarget, currentInstance?.problem ?? currentSchema.data.problem_template); });
-byId("copy-template").addEventListener("click", (event) => { void copyText(event.currentTarget, currentSchema.data.problem_template); });
-byId("copy-instance").addEventListener("click", (event) => { void copyText(event.currentTarget, currentInstance.problem); });
 byId("export-schema").addEventListener("click", () => {
-  const url = URL.createObjectURL(new Blob([currentSchema.raw], { type: "application/json" }));
+  // Preserve both exact serialized payloads, including integers outside Number.
+  const raw = currentVariantRaw
+    ? '{"schema":' + currentSchema.raw + ',"variant":' + currentVariantRaw + '}'
+    : currentSchema.raw;
+  const url = URL.createObjectURL(new Blob([raw], { type: "application/json" }));
   const link = element("a");
   link.href = url;
-  link.download = "math-schema-" + currentSchema.data.seed + ".json";
+  link.download = currentInstance
+    ? "math-task-" + currentSchema.data.seed + "-" + currentInstance.parameter_seed + ".json"
+    : "math-schema-" + currentSchema.data.seed + ".json";
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 });

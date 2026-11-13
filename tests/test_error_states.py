@@ -1,7 +1,7 @@
 """Independent UI review: failure recovery and honest structural fallbacks."""
 import tempfile
 import unittest
-from support import HAS_WEBKIT, compile_webkit, run_webkit, static_origin
+from support import HAS_BROWSER, prepare_browser, run_browser, static_origin
 
 FAULT_INJECTION = r'''
   const originalPost = Worker.prototype.postMessage;
@@ -19,17 +19,17 @@ FAULT_INJECTION = r'''
 '''
 
 
-@unittest.skipUnless(HAS_WEBKIT, 'Requires macOS system WebKit and Clang')
+@unittest.skipUnless(HAS_BROWSER, 'Requires Playwright with Chromium, or native macOS WebKit and Clang')
 class FrontendErrorStateTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.temporary = tempfile.TemporaryDirectory(prefix='math-demo-error-states-')
         cls.addClassCleanup(cls.temporary.cleanup)
-        cls.runner = compile_webkit(cls.temporary.name)
+        cls.runner = prepare_browser(cls.temporary.name)
 
     def run_case(self, script):
         with static_origin() as server:
-            return run_webkit(self.runner, server.url, FAULT_INJECTION + script)
+            return run_browser(self.runner, server.url, FAULT_INJECTION + script)
 
     def test_failed_template_selection_can_fill_current_task_without_reselection(self):
         output = self.run_case(r'''

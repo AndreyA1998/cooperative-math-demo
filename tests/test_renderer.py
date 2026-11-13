@@ -3,23 +3,50 @@ import json
 import tempfile
 import unittest
 
-from support import HAS_WEBKIT, compile_webkit, run_webkit, static_origin
+from support import HAS_BROWSER, prepare_browser, run_browser, static_origin
 
 
-@unittest.skipUnless(HAS_WEBKIT, "Requires macOS system WebKit and Clang")
+@unittest.skipUnless(HAS_BROWSER, "Requires Playwright with Chromium, or native macOS WebKit and Clang")
 class RendererBrowserTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         temporary = tempfile.TemporaryDirectory(prefix="math-demo-renderer-")
         cls.addClassCleanup(temporary.cleanup)
-        cls.runner = compile_webkit(temporary.name)
+        cls.runner = prepare_browser(temporary.name)
 
     def render_case(self, script, page="__renderer_test__.html"):
         with static_origin() as server:
-            result = run_webkit(self.runner, server.url + page, script, timeout=45)
+            result = run_browser(self.runner, server.url + page, script, timeout=45)
             self.assertIn("OK", result)
             self.assertFalse(any(path.endswith("worker.js") for _, path in server.requests))
             self.assertFalse(any(method == "POST" for method, _ in server.requests))
+
+    def test_idle_interface_hides_runtime_status_and_has_no_technical_panels(self):
+        self.render_case(r'''
+          check(!document.querySelector(".technical-details, .page-footer"), "Technical panels or footer remain in the task interface");
+          class FixtureWorker {
+            constructor() { window.fixtureWorker = this; queueMicrotask(() => this.onmessage?.({data: {type: "ready"}})); }
+            terminate() {}
+            postMessage(message) {
+              const payload = message.path === "/api/catalogue"
+                ? {problems: [{id: "prealgebra/test/11", subject: "prealgebra", split: "test"}]}
+                : {presentation: {inputs: [], segments: [{kind: "text", text: "Pattern"}], notes: []}};
+              queueMicrotask(() => this.onmessage({data: {id: message.id, status: 200, raw: JSON.stringify(payload)}}));
+            }
+          }
+          window.Worker = FixtureWorker;
+          await import("./main.js");
+          await until(idleAtomic, "ready controls");
+          check(document.querySelector(".runtime-banner").hidden && !$("runtime-status").textContent, "Successful runtime leaves a permanent banner");
+          window.fixtureWorker.onmessage({data: {type: "fatal", message: "Test failure"}});
+          check(!document.querySelector(".runtime-banner").hidden && !$("runtime-retry").hidden, "Failure is hidden with the successful status");
+          $("runtime-retry").click();
+          check(!document.querySelector(".runtime-banner").hidden, "Retry loading state is hidden");
+          await until(() => document.querySelector(".runtime-banner").hidden, "ready after retry");
+          check(!$("runtime-status").textContent, "Retry kept an idle message");
+          check($("atomic-copy").getAttribute("aria-label"), "Copy icon is not accessible");
+          return "OK: quiet successful interface with visible real loading and failure states";
+        ''', page="__component_test__.html")
 
     def test_missing_renderer_keeps_readable_math_colored_roles_and_literal_html(self):
         self.render_case(r'''

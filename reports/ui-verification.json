@@ -1,116 +1,85 @@
 {
-  "checked_at": "2026-11-13T12:59:19.995171+00:00",
+  "checked_at": "2026-11-13T13:31:24.231380+00:00",
   "status": "passed",
-  "runtime_archive_sha256": "843a3c9f803b84d6db09db0fa0d66b99e98c1b9ddbc23b187973fe0733c7c3ab",
-  "runtime_archive_bytes": 2319357,
+  "runtime_archive_sha256": "bd118d45430ced73b56d2d3df82d3e5f6e7644ef4f78f8145256913d71b7258a",
+  "runtime_archive_bytes": 2320611,
   "frontend_sha256": {
-    "index.html": "1b8288e54135bfcb8aa82e4db6814d4c170f4587f09db2dfabfed96debf0ba36",
-    "styles.css": "513f42011f790be730889776c7b5bba76da0dd82c813401de4785c7e3f0cc045",
-    "composite.css": "64fe8d934205e9a3bcabf31b4276866b609a561039b9613487933d2244042590",
-    "app.js": "f643d2fd16875dd54bffc037e8bbc17156dd4b683e7afe37ef1bb5f494ab5dfa",
-    "composite.js": "43155be59b906199762bd8ddc984bbc3145ff5640175f1285bc4222b7c8e8550",
-    "math-renderer.js": "33b68b8721cb47525ad1e76ac130ea125254b028c0fd68875c9529306705263c",
-    "main.js": "3edf3444a58c7763930b7eb82d228d33631900e4ab1652f61b8539280f6fafd2"
+    "index.html": "36803d1ec8caa15d328b27d9b0ce15ad5835a29568fa7c66237dc23f04341150",
+    "styles.css": "f26c0a06a4d639e48579f3cbffe82759d69c639f01355b1741c17f1ec52a7048",
+    "composite.css": "d963954c721889fad5b86139850f7ce9a6d5acd5916d5ffca1438c8cd7af0173",
+    "app.js": "4ee3b46348fb0686a7c3c2de7c442e44fdb1cd6bd5147bf985717755b50b99d3",
+    "composite.js": "72a2cb6f3b8602518069b820c3eb919db348a6dae0875df459200b3ef8c40cbe",
+    "math-renderer.js": "930559a2d90cf0003a8ea1ab91a65cda21839596a1451bd28715624ffb9f6bad",
+    "main.js": "3edf3444a58c7763930b7eb82d228d33631900e4ab1652f61b8539280f6fafd2",
+    "transport.js": "59879be094b9aac815a80b98b3de58c553a3fc4c6201a680727679e9d6dfc643"
   },
   "runs": [
     {
-      "command": "python3 -B -m unittest -v test_browser test_visual_state test_layout",
-      "cwd": "tests",
-      "passed": 6,
+      "command": "PYTHONPATH=tests python3 -B -m unittest -v test_browser test_visual_state test_layout test_error_states",
+      "passed": 9,
       "failed": 0,
-      "elapsed_seconds": 385.628,
-      "browser": "macOS WebKit with real Pyodide",
+      "elapsed_seconds": 293.468,
+      "browser": "Real macOS WebKit with Pyodide",
       "coverage": [
-        "All 4286 atomic IDs: WASM raw output equals native Python digest",
-        "Exact uint64 strings and raw large-integer schema import/export",
-        "Canonical model copy for bare schema and filled instance",
-        "Initial atomic pattern, separate fill, reset, random bare task",
-        "Subject/split/task cache and top-tab persistence",
-        "In-place composite node answers, incoming values, joint target parameters",
-        "Runtime download failure and retry",
-        "390px controls, math scrolling and no page overflow"
+        "All 4286 atomic IDs: exact WASM/native raw output digest",
+        "Exact uint64 seeds and raw large-integer schemas",
+        "Canonical copy and complete ready-task download: original raw schema plus original raw variant payload",
+        "Readable source subject/number/split in vertices, separate from local task number",
+        "No expandable technical panels, footer or lower legend; required conversion rules remain visible",
+        "Initial bare pattern, separate fill/reset, filter and tab memory",
+        "All composite node answers, incoming values and joint target parameters update in place",
+        "Runtime failure/retry and missing-presentation recovery",
+        "390px controls and math with no page overflow",
+        "Structural fallback explanation, exact native filled question and reset"
       ]
     },
     {
-      "command": "python3 -B -m unittest discover -s tests -p test_renderer.py -v",
-      "passed": 3,
+      "command": "PYTHONPATH=tests python3 -B -m unittest test_renderer -v",
+      "passed": 4,
       "failed": 0,
-      "elapsed_seconds": 16.13,
+      "elapsed_seconds": 12.844,
       "coverage": [
-        "Real KaTeX and boxed symbolic/filled math",
-        "Readable safe text fallback when rendering fails",
-        "Automatic reuse notice preserves user preference"
+        "Real KaTeX and structural math fragments",
+        "Safe readable fallback",
+        "Automatic reuse warning",
+        "Ready status cleared/hidden; actual loading, retry and failures visible; no idle technical panels"
       ]
     },
     {
       "command": "node --test tests/*.test.mjs",
       "passed": 9,
       "failed": 0,
-      "node_executable": "/Users/a.v.anokhin/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
-      "coverage": [
-        "Worker lifecycle, retry, stale messages, watchdog and exact raw JSON"
-      ]
+      "node_executable": "/Users/a.v.anokhin/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node"
     },
     {
-      "command": "python3 -B -m unittest discover -s tests -p test_error_states.py -v",
-      "passed": 3,
+      "test_file": "tests/test_slot_ownership.py",
+      "independent_reviewer": "dataset_structure_review",
+      "passed": 9,
       "failed": 0,
-      "elapsed_seconds": 81.633,
-      "independent_reviewer": "dataset_demo_bridge",
-      "report": "reports/frontend-review.json",
+      "verification": "Focused independent runs",
       "coverage": [
-        "Missing atomic template: disabled stale actions, Fill recovery, prior task cache",
-        "Composite presentation failure: successful variant then reset clears all values",
-        "Computed-statement fallback: plain explanation, chips, exact filled question, reset"
-      ]
+        "Six semantic annotation/backend regressions",
+        "All 4286 IDs x 3 seeds independently checked for delimiter and group boundaries",
+        "Two real-WebKit regressions: prose/TeX ownership and empty/negative/bare sign behavior"
+      ],
+      "browser_subset_elapsed_seconds": 4.135,
+      "boundary_audit_elapsed_seconds": 26.087
     },
     {
-      "command": "node --check app.js; node --check composite.js; node --check math-renderer.js; git diff --check",
+      "command": "node --check app.js; node --check composite.js; node --check math-renderer.js; node --check transport.js; git diff --check",
       "status": "passed"
     }
   ],
   "limits": {
     "normal_browser_case_timeout_seconds": 240,
     "exhaustive_4286_id_case_timeout_seconds": 900,
-    "initial_exhaustive_run": "The previous 240-second bound expired. The complete 4286-ID comparison passed after increasing only this exhaustive case limit.",
+    "initial_exhaustive_run": "The earlier redesign exceeded its former 240-second bound. Only the exhaustive 4286-ID case allows 900 seconds; the corrected nine-test browser suite passed in 293.468 seconds total.",
     "platform": "Browser tests use native macOS WebKit; other platforms explicitly skip them.",
     "network": "Browser runtime and KaTeX use their pinned CDN URLs; the static origin receives no API POSTs."
   },
   "visual_checks": {
-    "desktop_viewports_css_pixels": [
-      [
-        1280,
-        1000
-      ],
-      [
-        1280,
-        1200
-      ]
-    ],
-    "mobile_viewport_css_pixels": [
-      390,
-      1000
-    ],
-    "states": [
-      "bare",
-      "filled",
-      "reset"
-    ],
-    "card_views": [
-      "leaf",
-      "internal"
-    ],
-    "card_captures": 12,
-    "schema_seed": "42",
-    "parameter_seed": "7",
-    "reviewed": [
-      "Compact tree with only local numbers and actual values",
-      "Visible per-card and final answers",
-      "Internal target parameters replace placeholders",
-      "Bare reset restores symbolic slots",
-      "Long formulas scroll inside cards"
-    ],
-    "artifacts": "Temporary screenshots were inspected and are not tracked. Final small correction labels incoming filled signals u1/u2 explicitly and detects overflow from visible KaTeX HTML width."
+    "current_release": "Root agent performs the personal Safari walkthrough separately. Automated real-WebKit checks cover source labels, visible rules and answers, controls at 390px, and absence of page overflow.",
+    "previous_design_captures": "Twelve desktop/mobile bare/filled/reset card screenshots were inspected during the previous redesign and removed after review; current changes are covered by the tests above and root Safari QA."
   },
   "references": [
     {
@@ -122,7 +91,7 @@
       "application": "Even leaf spacing and centered parent nodes; reduced labels to preserve the hierarchy."
     }
   ],
-  "dependencies": "No framework, local environment or package cache installed; existing worker/RPC/transport preserved.",
+  "dependencies": "No framework, local environment or package cache installed. Existing worker and RPC computation preserved; transport changes affect only ready/loading/error display.",
   "source_commit": "8b8e3e464732a17563235a21cf4336c9fa5bd9da",
   "runtime_sha256": "843a3c9f803b84d6db09db0fa0d66b99e98c1b9ddbc23b187973fe0733c7c3ab",
   "native_bundle_suite": {
@@ -164,5 +133,50 @@
     "atomic_reset": true,
     "composite_reset": true,
     "tabs_preserve_state": true
+  },
+  "download_format": {
+    "bare": "The exact original schema JSON bytes.",
+    "filled": "A JSON object with schema and variant members, embedding both original raw JSON payloads directly. Complete task, answer, bottom parameters and trace are at variant.instance; display annotations are at variant.presentation. No JavaScript numeric reserialization."
+  },
+  "changes": [
+    "Removed technical expanders, footer, lower legend and permanent successful runtime banner.",
+    "Retained required conversion rules as plain compact math.",
+    "Added source provenance to vertices and card headings.",
+    "Retained a visible ready-task download action with exact complete data.",
+    "Dropped empty filled sign annotations and rejected highlighting across prose/TeX boundaries.",
+    "Kept the intentionally defined section-sign operator unchanged."
+  ],
+  "personal_visual_review": {
+    "environment": "isolated macOS WebKit window, before server-only testing preference",
+    "atomic_cases": 12,
+    "views": [
+      "bare",
+      "filled",
+      "reset"
+    ],
+    "all_inspected_by_root": true,
+    "cases": [
+      "intermediate_algebra/test/200",
+      "prealgebra/test/11",
+      "algebra/train/1316",
+      "counting_and_probability/train/33",
+      "counting_and_probability/train/253",
+      "algebra/train/26",
+      "algebra/train/374",
+      "geometry/train/735",
+      "prealgebra/train/47",
+      "intermediate_algebra/train/1292",
+      "algebra/train/52",
+      "algebra/train/681"
+    ],
+    "checks": [
+      "literal prose remains uncolored",
+      "fractions without JSON quotes",
+      "empty boxes absent",
+      "large integers preserved",
+      "words and list entries have correct ownership",
+      "no persistent ready banner or technical expanders"
+    ],
+    "limitation": "331 structural patterns intentionally render the filled native condition without guessed inline ownership; parameter chips remain visible."
   }
 }

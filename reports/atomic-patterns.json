@@ -2,15 +2,15 @@
   "format": "atomic-presentation-coverage-1",
   "supported_ids": 4286,
   "scope_counts": {
-    "native-fields": 3945,
-    "computed-statement": 341
+    "native-fields": 3955,
+    "computed-statement": 331
   },
   "verified_seeds": [
     "0",
     "17",
     "18446744073709551615"
   ],
-  "verification": "GET /api/template and GET /api/generate: exact native text, stable scope, exact input strings",
+  "verification": "GET /api/template and GET /api/generate over all IDs and listed seeds: exact native text, stable scope, exact display strings",
   "computed_statement_ids": [
     "algebra/test/0",
     "algebra/test/1002",
@@ -54,7 +54,6 @@
     "algebra/test/610",
     "algebra/test/611",
     "algebra/test/65",
-    "algebra/test/657",
     "algebra/test/677",
     "algebra/test/687",
     "algebra/test/772",
@@ -117,7 +116,6 @@
     "algebra/train/272",
     "algebra/train/318",
     "algebra/train/336",
-    "algebra/train/357",
     "algebra/train/358",
     "algebra/train/414",
     "algebra/train/470",
@@ -180,7 +178,6 @@
     "counting_and_probability/train/76",
     "counting_and_probability/train/77",
     "intermediate_algebra/test/119",
-    "intermediate_algebra/test/200",
     "intermediate_algebra/test/278",
     "intermediate_algebra/test/335",
     "intermediate_algebra/test/610",
@@ -192,12 +189,10 @@
     "intermediate_algebra/test/745",
     "intermediate_algebra/test/797",
     "intermediate_algebra/test/834",
-    "intermediate_algebra/test/835",
     "intermediate_algebra/test/856",
     "intermediate_algebra/test/858",
     "intermediate_algebra/test/865",
     "intermediate_algebra/train/1018",
-    "intermediate_algebra/train/1033",
     "intermediate_algebra/train/1043",
     "intermediate_algebra/train/1068",
     "intermediate_algebra/train/1075",
@@ -208,23 +203,18 @@
     "intermediate_algebra/train/236",
     "intermediate_algebra/train/300",
     "intermediate_algebra/train/304",
-    "intermediate_algebra/train/374",
     "intermediate_algebra/train/376",
     "intermediate_algebra/train/487",
     "intermediate_algebra/train/497",
-    "intermediate_algebra/train/50",
     "intermediate_algebra/train/519",
-    "intermediate_algebra/train/520",
     "intermediate_algebra/train/567",
     "intermediate_algebra/train/627",
     "intermediate_algebra/train/668",
-    "intermediate_algebra/train/714",
     "intermediate_algebra/train/719",
     "intermediate_algebra/train/765",
     "intermediate_algebra/train/781",
     "intermediate_algebra/train/877",
     "intermediate_algebra/train/891",
-    "intermediate_algebra/train/917",
     "intermediate_algebra/train/925",
     "intermediate_algebra/train/957",
     "intermediate_algebra/train/984",
@@ -353,5 +343,6 @@
     "precalculus/train/729",
     "precalculus/train/730",
     "precalculus/train/743"
-  ]
+  ],
+  "ownership_verification": "All IDs and listed seeds: no parameter spans cross math delimiters or TeX groups. Six independent semantic regressions additionally verify exact coefficient owners, repeated values, derived polynomials, safe fallback prose and unquoted scalar strings."
 }

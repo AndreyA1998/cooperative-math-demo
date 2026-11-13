@@ -3,12 +3,14 @@
 No markup is stored in schemas or model prompts. All filled fragments must
 reconstruct the native question byte-for-byte before being sent to the browser.
 """
+import ast
 import json
+import textwrap
 import re
 import operator
 from dataclasses import dataclass
 from functools import lru_cache
-from inspect import getclosurevars
+from inspect import getclosurevars, getsource
 from types import SimpleNamespace, FunctionType, CodeType
 from fractions import Fraction
 
@@ -21,6 +23,11 @@ from composite_dataset.rendering import _render_inputs
 from composite_dataset.runtime import instantiate
 from composite_dataset.schema import validate_schema
 from composite_dataset.smart_adapters import evaluate_adapter
+
+
+def _display_value(value):
+    """Readable exact chip text; serialization stays at the JSON boundary."""
+    return value if isinstance(value, str) else _json(value)
 
 
 def _tex_text(value):
@@ -198,7 +205,7 @@ def _presentation_validated(schema, instance=None):
         segments, notes, scope = _question(node, params)
         rules, rule_notes = ([], []) if external else _adapter_math(node, by_id)
         inputs = [{'name': name, 'key': node['label'] + '.' + name, 'role': role,
-                   'text': None if params is None else _json(params[name])}
+                   'text': None if params is None else _display_value(params[name])}
                   for name in node['profile']['parameter_names']]
         incoming = []
         for binding in node['bindings']:
@@ -208,7 +215,7 @@ def _presentation_validated(schema, instance=None):
                              'input_index': binding['input_index'],
                              'input_name': node['profile']['parameter_names'][binding['input_index']],
                              'answer': answer,
-                             'value': None if answer is None else _json(evaluate_adapter(binding['operator'], answer))})
+                             'value': None if answer is None else _display_value(evaluate_adapter(binding['operator'], answer))})
         nodes.append({'node_id': node['node_id'], 'label': node['label'], 'number': node['number'],
                       'source_id': node['source_id'], 'kind': 'bottom' if external else 'internal',
                       'inputs': inputs, 'segments': segments, 'notes': notes + rule_notes,
@@ -233,6 +240,8 @@ class _ExpressionField:
             return str(value)
         if self.conversion == 'repr':
             return repr(value)
+        if self.conversion == 'percent':
+            return self.spec % value
         return format(value, self.spec)
 
     def label(self):
@@ -372,6 +381,81 @@ def _referenced_names(code):
     return names
 
 
+_PERCENT_FIELD = re.compile(r'%(?:\(([^)]+)\))?([#0\- +]*\d*(?:\.\d+)?[hlL]?[diouxXeEfFgGcrsa%])')
+
+
+def _percent_format(left, right, record):
+    """Trace native %-format fields, leaving numeric modulo unchanged."""
+    if not isinstance(left, str) or not tuple(_walk_expressions(right)):
+        return left % right
+    values = right if isinstance(right, tuple) else (right,)
+    parts, offset, index = [], 0, 0
+    for match in _PERCENT_FIELD.finditer(left):
+        literal = left[offset:match.start()]
+        if '%' in literal:
+            raise ValueError('Unsupported symbolic percent format')
+        parts.append(literal)
+        key, format_tail = match.groups()
+        if format_tail == '%':
+            parts.append('%')
+        else:
+            value = right[key] if key is not None else values[index]
+            if key is None:
+                index += 1
+            spec = '%' + format_tail
+            if isinstance(value, _Expression) and value.names:
+                parts.append(record(_ExpressionField(value, spec, 'percent')))
+            else:
+                parts.append(spec % _resolve_expressions(value, {}))
+        offset = match.end()
+    if '%' in left[offset:]:
+        raise ValueError('Unsupported symbolic percent format')
+    parts.append(left[offset:])
+    if not isinstance(right, dict) and index != len(values):
+        raise ValueError('Unused symbolic percent format argument')
+    return ''.join(parts)
+
+
+@lru_cache(maxsize=None)
+def _percent_code(original):
+    """Rewrite only the display clone of a native named function.
+
+    The original function, its mathematical operations and its globals are not
+    edited. Source unavailable or ambiguous means no rewrite and a safe fallback.
+    Compiling an enclosing scope preserves the exact native free-variable names.
+    """
+    try:
+        source = ast.parse(textwrap.dedent(getsource(original)))
+        if len(source.body) != 1 or not isinstance(source.body[0], ast.FunctionDef):
+            return original.__code__
+        definition = source.body[0]
+        if definition.name != original.__name__ or not any(isinstance(node, ast.BinOp) and isinstance(node.op, ast.Mod) for node in ast.walk(definition)):
+            return original.__code__
+        helper = '_math_demo_percent_format'
+        if helper in _referenced_names(original.__code__):
+            return original.__code__
+        class RewritePercent(ast.NodeTransformer):
+            def visit_BinOp(self, node):
+                self.generic_visit(node)
+                if isinstance(node.op, ast.Mod):
+                    return ast.copy_location(ast.Call(ast.Name(helper, ast.Load()), [node.left, node.right], []), node)
+                return node
+        definition = RewritePercent().visit(definition)
+        definition.decorator_list = []
+        assignments = [ast.Assign([ast.Name(name, ast.Store())], ast.Constant(None))
+                       for name in original.__code__.co_freevars]
+        wrapper = ast.FunctionDef(name='_display_scope',
+            args=ast.arguments(posonlyargs=[], args=[], kwonlyargs=[], kw_defaults=[], defaults=[]),
+            body=[*assignments, definition], decorator_list=[])
+        module = ast.fix_missing_locations(ast.Module(body=[wrapper], type_ignores=[]))
+        compiled = compile(module, original.__code__.co_filename, 'exec')
+        outer = next(value for value in compiled.co_consts if isinstance(value, CodeType))
+        code = next(value for value in outer.co_consts if isinstance(value, CodeType) and value.co_name == original.__name__)
+        return code if set(code.co_freevars) == set(original.__code__.co_freevars) else original.__code__
+    except (OSError, TypeError, SyntaxError, ValueError, StopIteration):
+        return original.__code__
+
+
 def _lift_renderer(function, record):
     """Clone the renderer graph; native solvers and module globals stay intact."""
     active, done = set(), {}
@@ -386,14 +470,17 @@ def _lift_renderer(function, record):
             raise ValueError('Recursive symbolic helper')
         active.add(original)
         namespace = dict(original.__globals__)
+        namespace['_math_demo_percent_format'] = lambda left, right: _percent_format(left, right, record)
         for name in _referenced_names(original.__code__):
             value = namespace.get(name)
             if value is Fraction:
                 namespace[name] = _lift_call(Fraction, record, symbolic_constant=True)
             elif isinstance(value, FunctionType) and value.__module__.startswith('template_dataset.families'):
                 namespace[name] = _lift_call(value, record, tex=True) if value.__name__ in _TEX_FORMATTERS else clone(value)
-        closure = None if original.__closure__ is None else tuple(cell(clone(c.cell_contents)) for c in original.__closure__)
-        result = FunctionType(original.__code__, namespace, original.__name__, original.__defaults__, closure)
+        code = _percent_code(original)
+        enclosed = dict(zip(original.__code__.co_freevars, original.__closure__ or ()))
+        closure = tuple(cell(clone(enclosed[name].cell_contents)) for name in code.co_freevars) if code.co_freevars else None
+        result = FunctionType(code, namespace, original.__name__, original.__defaults__, closure)
         result.__kwdefaults__ = original.__kwdefaults__
         done[original] = result
         active.remove(original)
@@ -488,8 +575,8 @@ def _atomic_parts(source_id):
 def atomic_presentation(source_id, params=None):
     """Annotate an ordinary atomic domain without limiting it to binary profiles.
 
-    The fallback explicitly owns the whole computed statement. It never guesses
-    parameter positions from equal digits, sampled diffs, or substring matches.
+    A fallback statement is plain text, with separately named input chips.
+    Unknown ownership never becomes a whole-statement parameter annotation.
     """
     template = get_template(source_id)
     parts = _atomic_parts(source_id)
@@ -516,11 +603,10 @@ def atomic_presentation(source_id, params=None):
     else:
         names = list(template.parameters)
         label = 'statement(' + ', '.join(names) + ')'
-        segments = [{'kind': 'parameter', 'name': label, 'key': 'statement', 'text': label if params is None else template.render(params),
-                     'role': 'external', 'filled': params is not None, 'parameters': names}]
+        segments = [{'kind': 'text', 'text': label if params is None else template.render(params)}]
         notes.append('Форма условия вычисляется из параметров; после заполнения появится точный текст задачи.')
     return {'version': 'atomic-presentation-1', 'mode': 'template' if params is None else 'instance',
             'source_id': source_id, 'scope': scope, 'segments': segments, 'notes': notes,
             'inputs': [{'name': name, 'key': name, 'role': 'external', 'domain': domain,
-                        'text': None if params is None else _json(params[name]), 'domain_display': _json(domain)}
+                        'text': None if params is None else _display_value(params[name]), 'domain_display': _json(domain)}
                        for name, domain in template.parameters.items()]}

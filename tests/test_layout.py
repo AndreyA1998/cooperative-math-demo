@@ -1,17 +1,17 @@
-"""Mobile-width layout with actual WebKit, Pyodide and filled mathematics."""
+"""Mobile-width layout with actual browser, Pyodide and filled mathematics."""
 import tempfile
 import unittest
 
-from support import HAS_WEBKIT, MOUNT, compile_webkit, run_webkit, static_origin
+from support import HAS_BROWSER, MOUNT, prepare_browser, run_browser, static_origin
 
 
-@unittest.skipUnless(HAS_WEBKIT, "Requires macOS system WebKit and Clang")
+@unittest.skipUnless(HAS_BROWSER, "Requires Playwright with Chromium, or native macOS WebKit and Clang")
 class MobileLayoutTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.temporary = tempfile.TemporaryDirectory(prefix="math-demo-mobile-")
         cls.addClassCleanup(cls.temporary.cleanup)
-        cls.runner = compile_webkit(cls.temporary.name)
+        cls.runner = prepare_browser(cls.temporary.name)
 
     def test_390px_real_variants_keep_controls_and_math_inside_the_page(self):
         # The existing runner is 1280px wide. A same-origin iframe gives CSS
@@ -138,7 +138,7 @@ class MobileLayoutTests(unittest.TestCase):
           return "OK: 390px actual WASM random task, long formula, composite variant and usable seed controls";
         '''
         with static_origin() as server:
-            output = run_webkit(self.runner, server.url + "__renderer_test__.html", script)
+            output = run_browser(self.runner, server.url + "__renderer_test__.html", script)
             self.assertIn("OK: 390px actual WASM", output)
             self.assertTrue(any(path.endswith("/worker.js") for _, path in server.requests))
             self.assertTrue(any(path.endswith("/runtime.zip") for _, path in server.requests))

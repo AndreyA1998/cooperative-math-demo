@@ -14,14 +14,24 @@ jobs:
       contents: read
       pages: read
     runs-on: ubuntu-latest
+    env:
+      PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.cache/ms-playwright
     steps:
       - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      - name: Prepare isolated browser test environment
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -r requirements-test.txt
+          .venv/bin/python -m playwright install --with-deps --only-shell chromium
       - name: Verify packaged Python runtime
-        run: python3 -B scripts/check.py
+        run: .venv/bin/python -B scripts/check.py
       - name: Verify JavaScript transport
         run: node --test tests/*.test.mjs
       - name: Build static artifact
-        run: python3 -B scripts/build_site.py
+        run: .venv/bin/python -B scripts/build_site.py
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:

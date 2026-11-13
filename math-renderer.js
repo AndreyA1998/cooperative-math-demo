@@ -90,12 +90,20 @@ export const MathPresentation = (() => {
 
   function render(target, segments) {
     let text = "";
-    const slots = [];
+    let slots = [];
     for (const segment of segments) {
       const start = text.length;
       text += segment.text;
-      if (segment.kind === "parameter") slots.push({ ...segment, start, end: text.length });
+      if (segment.kind === "parameter" && !(segment.filled && segment.text.length === 0)) {
+        slots.push({ ...segment, start, end: text.length });
+      }
     }
+    const ranges = mathRanges(text);
+    // An annotation may own a value, but never a mixture of prose and TeX
+    // delimiters. Keep such structural fragments exact and unhighlighted.
+    slots = slots.filter((slot) => ranges.every((range) =>
+      slot.end <= range.start || slot.start >= range.end
+      || (slot.start >= range.contentStart && slot.end <= range.contentEnd)));
     const children = [];
     const equations = [];
     function appendText(into, start, end) {
@@ -106,7 +114,6 @@ export const MathPresentation = (() => {
         const span = document.createElement("span");
         span.className = "parameter-slot slot-" + slot.role + (slot.filled ? " slot-filled" : "");
         span.dataset.parameter = slot.key;
-        span.title = (slot.role === "external" ? "Внешний параметр " : "Внутренний вход ") + slot.key;
         span.textContent = text.slice(first, last);
         into.push(span);
         start = last;
@@ -114,7 +121,7 @@ export const MathPresentation = (() => {
       into.push(document.createTextNode(text.slice(start, end)));
     }
     let at = 0;
-    for (const range of mathRanges(text)) {
+    for (const range of ranges) {
       appendText(children, at, range.start);
       const equation = document.createElement("span");
       equation.className = "math-fragment" + (range.display ? " math-display" : "");
@@ -133,7 +140,6 @@ export const MathPresentation = (() => {
       source += text.slice(position, range.contentEnd);
       if (contained.length) {
         equation.dataset.parameters = [...new Set(contained.map((slot) => slot.key))].join(" ");
-        equation.title = contained.map((slot) => (slot.role === "external" ? "Внешний параметр " : "Внутренний вход ") + slot.key).join("; ");
       }
       // The readable fallback also preserves slot colors before/without KaTeX.
       const fallback = document.createElement("span");

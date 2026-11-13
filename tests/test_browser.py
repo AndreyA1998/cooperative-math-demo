@@ -1,4 +1,4 @@
-"""Actual WebKit + Pyodide integration against a static repository subpath."""
+"""Actual browser + Pyodide integration against a static repository subpath."""
 from copy import deepcopy
 from hashlib import sha256
 import json
@@ -6,7 +6,7 @@ import tempfile
 import unittest
 
 from support import (
-    HAS_WEBKIT, MOUNT, compile_webkit, ensure_runtime, run_webkit, static_origin,
+    HAS_BROWSER, MOUNT, prepare_browser, ensure_runtime, run_browser, static_origin,
 )
 
 ensure_runtime()
@@ -26,17 +26,17 @@ def native(method, path, query="", body=None):
     return raw
 
 
-@unittest.skipUnless(HAS_WEBKIT, "Requires macOS system WebKit and Clang")
+@unittest.skipUnless(HAS_BROWSER, "Requires Playwright with Chromium, or native macOS WebKit and Clang")
 class BrowserRuntimeTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.temporary = tempfile.TemporaryDirectory(prefix="math-demo-webkit-")
         cls.addClassCleanup(cls.temporary.cleanup)
-        cls.runner = compile_webkit(cls.temporary.name)
+        cls.runner = prepare_browser(cls.temporary.name)
 
     def run_case(self, script, *, suffix="", fail_once=(), timeout=240):
         with static_origin(fail_once=fail_once) as server:
-            output = run_webkit(self.runner, server.url + suffix, script, timeout=timeout)
+            output = run_browser(self.runner, server.url + suffix, script, timeout=timeout)
             self.assertIn("OK", output)
             self.assertTrue(any(path.endswith("/worker.js") for _, path in server.requests))
             self.assertTrue(any(path.endswith("/runtime.zip") for _, path in server.requests))
@@ -153,9 +153,9 @@ class BrowserRuntimeTests(unittest.TestCase):
         schema = json.loads(raw_schema)
         raw_variant = native("POST", "/api/composite/variant", body='{"schema":' + raw_schema + ',"seed":"' + MAX_SEED + '"}')
         variant = json.loads(raw_variant)
-        expected = {"schemaRaw": raw_schema, "modelTemplate": schema["problem_template"],
+        expected = {"schemaRaw": raw_schema, "variantRaw": raw_variant, "modelTemplate": schema["problem_template"],
                     "modelInstance": variant["instance"]["problem"], "answer": variant["instance"]["answer"],
-                    "nodes": len(schema["nodes"])}
+                    "nodes": len(schema["nodes"]), "origins": [{"node_id": node["node_id"], "number": node["number"], "source_id": node["source_id"]} for node in schema["nodes"]]}
         self.run_case("const expected = " + json.dumps(expected) + r''';
           await until(idleAtomic, "runtime ready");
           check(!$("composite-panel").hidden && $("atomic-panel").hidden, "Direct composite tab link failed");
@@ -180,7 +180,17 @@ class BrowserRuntimeTests(unittest.TestCase):
           check($("composite-tree").matches("svg")
             && $("composite-tree").querySelectorAll(".tree-node").length === expected.nodes,
                 "Hierarchy diagram omitted mathematical nodes");
-          $("composite-copy-template").click();
+          const subjectNames = {algebra:"Алгебра", counting_and_probability:"Комбинаторика и вероятность", geometry:"Геометрия", intermediate_algebra:"Продвинутая алгебра", number_theory:"Теория чисел", prealgebra:"Начальная алгебра", precalculus:"Предварительный курс анализа"};
+          for (const item of expected.origins) {
+            const group = $("composite-tree").querySelector('[data-node="' + item.node_id + '"]');
+            const [subject, split, number] = item.source_id.split("/");
+            check(group.querySelector(".tree-label").textContent === String(item.number), "Provenance replaced the local task number");
+            check(group.textContent.includes(subjectNames[subject]) && group.textContent.includes("№ " + number + " · " + split), "Tree vertex lacks readable source provenance");
+            check(!group.textContent.includes(item.source_id), "Tree exposes slash-delimited technical IDs");
+          }
+          check(!document.querySelector("details, .canvas-footer, .page-footer"), "Unwanted expanders or legends remain");
+          check(template.querySelector(".conversion-rule"), "Removing expanders hid the required conversion rules");
+          $("composite-copy-current").click();
           await until(() => copied !== undefined, "copy model template");
           check(copied === expected.modelTemplate, "Copy changed the model-facing schema text");
           $("composite-export-schema").click();
@@ -197,9 +207,12 @@ class BrowserRuntimeTests(unittest.TestCase):
           check($("composite-root-answer").textContent === expected.answer, "Wrong exact root answer");
           check(template.querySelector(".slot-filled"), "Bottom values were not filled");
           copied = undefined;
-          $("composite-copy-instance").click();
+          $("composite-copy-current").click();
           await until(() => copied !== undefined, "copy model instance");
           check(copied === expected.modelInstance, "Copy changed the model-facing instance");
+          $("composite-export-schema").click();
+          check(await exported.text() === '{"schema":' + expected.schemaRaw + ',"variant":' + expected.variantRaw + '}', "Ready task download lost exact original schema or instance payload");
+          check($("composite-export-schema").textContent === "Скачать задачу", "Ready task has no visible download action");
           check(!reset.disabled, "Reset unavailable after generation");
           $("atomic-tab").click();
           $("composite-tab").click();

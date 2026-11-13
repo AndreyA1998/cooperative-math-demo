@@ -1,9 +1,10 @@
-"""Native runtime and static WebKit harness; no generator HTTP backend."""
+"""Native runtime and static browser harness; no generator HTTP backend."""
 import atexit
 from contextlib import contextmanager
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import importlib.util
+import os
 from pathlib import Path
 import re
 import shutil
@@ -17,6 +18,11 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 MOUNT = "/cooperative-math-demo/"
 HAS_WEBKIT = sys.platform == "darwin" and shutil.which("clang") is not None
+HAS_PLAYWRIGHT = importlib.util.find_spec("playwright") is not None
+HAS_BROWSER = HAS_WEBKIT or HAS_PLAYWRIGHT
+BROWSER_REQUIREMENT = "Requires Playwright with Chromium, or native macOS WebKit and Clang"
+if os.environ.get("MATH_DEMO_REQUIRE_BROWSER") == "1" and not HAS_BROWSER:
+    raise RuntimeError("Browser checks are required: install requirements-test.txt and run playwright install --only-shell chromium")
 
 
 def ensure_runtime():
@@ -78,6 +84,38 @@ int main(int argc, char **argv) {
     }
 }
 '''
+
+PLAYWRIGHT_RUNNER = r'''
+import asyncio
+from pathlib import Path
+import sys
+from playwright.async_api import async_playwright
+
+async def main():
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch(headless=True)
+        page = await browser.new_page(viewport={"width": 1280, "height": 1000})
+        errors = []
+        page.on("pageerror", lambda error: errors.append(str(error)))
+        try:
+            await page.goto(sys.argv[1], wait_until="load", timeout=30000)
+            source = Path(sys.argv[2]).read_text(encoding="utf-8")
+            value = await asyncio.wait_for(
+                page.evaluate("async () => {\n" + source + "\n}"),
+                timeout=float(sys.argv[3]),
+            )
+            if value is not None:
+                print(value, flush=True)
+        except Exception:
+            if errors:
+                print("\n".join(errors[-5:]), file=sys.stderr)
+            raise
+        finally:
+            await browser.close()
+
+asyncio.run(main())
+'''
+
 
 JS_HELPERS = r'''
 const $ = id => document.getElementById(id);
@@ -170,8 +208,14 @@ def static_origin(**options):
         harness.close()
 
 
-def compile_webkit(directory):
+def prepare_browser(directory):
     directory = Path(directory)
+    if not HAS_WEBKIT:
+        if not HAS_PLAYWRIGHT:
+            raise RuntimeError(BROWSER_REQUIREMENT)
+        runner = directory / "playwright_runner.py"
+        runner.write_text(PLAYWRIGHT_RUNNER, encoding="utf-8")
+        return runner
     source, runner = directory / "runner.m", directory / "runner"
     source.write_text(WEBKIT_RUNNER, encoding="utf-8")
     subprocess.run(
@@ -182,11 +226,17 @@ def compile_webkit(directory):
     return runner
 
 
-def run_webkit(runner, url, script, *, timeout=240):
+def run_browser(runner, url, script, *, timeout=240):
     script_path = Path(runner).parent / "case.js"
     script_path.write_text(JS_HELPERS + script, encoding="utf-8")
-    result = subprocess.run([str(runner), url, str(script_path)],
-                            capture_output=True, text=True, timeout=timeout)
+    env = dict(os.environ)
+    if Path(runner).suffix == ".py":
+        env.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(ROOT / ".cache/ms-playwright"))
+        command = [sys.executable, "-B", str(runner), url, str(script_path), str(timeout)]
+    else:
+        command = [str(runner), url, str(script_path)]
+    result = subprocess.run(command, env=env, capture_output=True, text=True,
+                            timeout=timeout + 45)
     if result.returncode:
         diagnostic = result.stdout + result.stderr
         print(diagnostic, file=sys.stderr, flush=True)

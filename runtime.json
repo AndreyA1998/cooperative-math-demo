@@ -1,8 +1,8 @@
 {
   "format": "math-demo-runtime-1",
   "source_commit": "8b8e3e464732a17563235a21cf4336c9fa5bd9da",
-  "sha256": "843a3c9f803b84d6db09db0fa0d66b99e98c1b9ddbc23b187973fe0733c7c3ab",
-  "bytes": 2319357,
+  "sha256": "bd118d45430ced73b56d2d3df82d3e5f6e7644ef4f78f8145256913d71b7258a",
+  "bytes": 2320611,
   "files": {
     "composite_dataset/__init__.py": "94b9031c79e960bd900f510f2513da3894ea45d218af965eb3dbf0f0cf034a49",
     "composite_dataset/__main__.py": "05453bd779985f856751540f1e2d2f29592652b3f5397db82dbad2bb73ba5d23",
@@ -18,8 +18,8 @@
     "composite_dataset/smart_adapters.py": "ffaae5b4932618aac5d0735abe6af556eff4f8165e316b445430f39fa01f9d16",
     "composite_dataset/topology.py": "e168224aa7fc8c7f15fd9e3ac8379232ca81501ec7fc375928deb7bfeed980ee",
     "math_demo/__init__.py": "ad65d2179db9ad8e27c6d163a84b865d6f381bf54470255a3293404d4856bb6d",
-    "math_demo/api.py": "d0bb5b7401a50fcc42ed12328391428affd005d07d01683480ea9ac1d8968371",
-    "math_demo/presentation.py": "5982b49219a6f8ba5e3f8800a3a8a97683de9570f856091405f8644a98a5f205",
+    "math_demo/api.py": "65a726b2cb4f1d24bb714867b1e44662f9c44ce049636e7c2458a1714374304f",
+    "math_demo/presentation.py": "e66a8f2078cbb247e1196e0cbc7100d5ea7302c4fbf73b8a910f7bc033a462de",
     "source_dataset/LICENSE.MATH": "8f6401fb0b1fbfcac17aac8d61e4e1b0d2de9aa190d8aa655fedc5fd783b2ace",
     "source_dataset/__init__.py": "4ab64305a4a826c9af18373c915ea709c66757f8cc34d93e20d31d534181aa3d",
     "source_dataset/loader.py": "9c00f25ceaf6288c0e115c1fef69012c64be5e0fad5cc2b40e6eb5426151944e",

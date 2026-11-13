@@ -1,16 +1,16 @@
 """Browser regressions for the single-canvas pattern/instance experience."""
 import tempfile
 import unittest
-from support import HAS_WEBKIT, compile_webkit, run_webkit, static_origin
+from support import HAS_BROWSER, prepare_browser, run_browser, static_origin
 
 
-@unittest.skipUnless(HAS_WEBKIT, 'Requires macOS system WebKit and Clang')
+@unittest.skipUnless(HAS_BROWSER, 'Requires Playwright with Chromium, or native macOS WebKit and Clang')
 class VisualStateTests(unittest.TestCase):
     def test_pattern_fill_reset_and_filter_memory_with_real_runtime(self):
         with tempfile.TemporaryDirectory(prefix='math-demo-state-') as folder:
-            runner = compile_webkit(folder)
+            runner = prepare_browser(folder)
             with static_origin() as server:
-                result = run_webkit(runner, server.url, r'''
+                result = run_browser(runner, server.url, r'''
                   check($("atomic-reset"), "Atomic task has no reset to the bare pattern");
                   await until(idleAtomic, "initial bare pattern");
                   check($("atomic-problem-text").querySelector(".parameter-slot, [data-parameters]"), "Initial task has no symbolic slots");

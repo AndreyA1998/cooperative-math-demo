@@ -15,7 +15,7 @@ from composite_dataset import build_schema, instantiate
 from source_dataset.loader import load_corpus
 from template_dataset.registry import UnsupportedProblemError, registry
 from composite_dataset.serialization import loads_json
-from .presentation import _presentation_validated, presentation, atomic_presentation
+from .presentation import _presentation_validated, presentation, atomic_presentation, _display_value
 
 ATOMIC_ROUTES = {
     "/api/catalogue": set(),
@@ -85,7 +85,7 @@ def atomic_response(path, query):
     variant = generate(problem_id, seed)
     variant["seed"] = str(seed)
     variant["parameter_display"] = {
-        name: json.dumps(value, ensure_ascii=False, allow_nan=False)
+        name: _display_value(value)
         for name, value in variant["parameters"].items()
     }
     variant["presentation"] = atomic_presentation(problem_id, variant["parameters"])

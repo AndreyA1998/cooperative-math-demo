@@ -67,6 +67,35 @@ class AtomicPresentationTests(unittest.TestCase):
         filled = self.present(source, generate(source, 0)['parameters'])
         self.assertEqual(filled['scope'], bare['scope'])
 
+    def test_percent_formatted_amgm_coefficients_have_their_own_slots(self):
+        source = 'intermediate_algebra/test/200'
+        params = {'a': 3, 'b': 2, 'c': '243/2'}
+        result = self.present(source, params)
+        self.assertEqual(result['scope'], 'native-fields')
+        slots = [part for part in result['segments'] if part['kind'] == 'parameter']
+        self.assertEqual([(part['parameters'], part['text']) for part in slots],
+                         [(['a'], '3'), (['b'], '2'), (['c'], r'\frac{243}{2}')])
+        self.assertTrue(all('$' not in part['text'] for part in slots))
+        self.assertEqual(''.join(part['text'] for part in result['segments']),
+                         r'For positive real $x,y,z$, find the minimum of $\frac{3 x^3+2 y^3+\frac{243}{2} z^3}{xyz}$.')
+
+    def test_computed_statements_never_claim_static_prose_as_parameter(self):
+        source = 'algebra/train/53'
+        for params in (None, generate(source, 17)['parameters']):
+            result = self.present(source, params)
+            self.assertEqual(result['scope'], 'computed-statement')
+            self.assertTrue(all(part['kind'] == 'text' for part in result['segments']))
+
+    def test_string_parameter_chips_use_literal_content_without_json_quotes(self):
+        for source, params, name, expected in (
+            ('intermediate_algebra/test/200', {'a':3, 'b':2, 'c':'243/2'}, 'c', '243/2'),
+            ('counting_and_probability/train/33', {'word':'BANANA'}, 'word', 'BANANA'),
+        ):
+            with self.subTest(source=source):
+                result = self.present(source, params)
+                value = next(item['text'] for item in result['inputs'] if item['name'] == name)
+                self.assertEqual(value, expected)
+
     def test_all_supported_domains_reconstruct_ordinary_generation(self):
         for source in registry():
             with self.subTest(source=source):

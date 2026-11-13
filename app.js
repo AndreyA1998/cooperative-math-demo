@@ -62,9 +62,6 @@ function renderTask(state) {
   text.hidden = false;
   byId("mode").textContent = variant ? "Вариант" : "Шаблон";
   byId("problem-title").textContent = "Задача № " + taskNumber(activeId);
-  byId("problem-meta").textContent = activeId;
-  byId("version").textContent = content.generator_version ? "Генератор " + content.generator_version : "";
-  byId("template-notes").textContent = presentation?.notes?.join("\n") ?? "";
   byId("answer-value").textContent = variant?.answer ?? "—";
   byId("reset").disabled = !variant;
   byId("copy-status").textContent = "";

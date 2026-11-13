@@ -39,13 +39,12 @@
     </form>
     <p id="atomic-status" class="status" role="status" hidden></p>
     <article class="card problem-card" aria-labelledby="atomic-problem-title">
-      <header class="section-heading"><div><p class="eyebrow" id="atomic-mode">Шаблон</p><h2 id="atomic-problem-title">Задача</h2></div><span class="slot-hint"><i></i> Параметры</span></header>
+      <header class="section-heading"><div><p class="eyebrow" id="atomic-mode">Шаблон</p><h2 id="atomic-problem-title">Задача</h2></div><div class="copy-control"><button id="atomic-copy" class="icon-button" type="button" title="Копировать условие" aria-label="Копировать условие"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V4H4v12h4"/></svg></button><output id="atomic-copy-status"></output></div></header>
       <p id="atomic-placeholder" class="muted">Загружаем шаблон…</p>
       <div id="atomic-params" class="parameter-chips" hidden></div>
       <div id="atomic-problem-text" lang="en" class="problem-text" hidden></div>
       <p id="atomic-renderer-note" class="muted help" role="status" hidden></p>
       <section class="answer" id="atomic-answer" aria-labelledby="atomic-answer-title"><h3 id="atomic-answer-title">Ответ</h3><div class="answer-value" id="atomic-answer-value">—</div></section>
-      <details class="technical-details"><summary>Технические детали</summary><p class="metadata" id="atomic-problem-meta"></p><p id="atomic-version" class="muted version"></p><div id="atomic-template-notes" class="technical-notes" lang="en"></div><div class="copy-control"><button id="atomic-copy" type="button">Копировать условие</button><output id="atomic-copy-status"></output></div></details>
     </article>
   </section>
   <section id="composite-panel" class="tab-panel composite" role="tabpanel" aria-labelledby="composite-tab" tabindex="0" hidden>
@@ -66,20 +65,17 @@
     <div id="composite-parameter-hint" class="empty-canvas"><span class="empty-tree" aria-hidden="true">○<br>╱ ╲<br>○ &nbsp; ○</span><p>Постройте схему, затем заполните числа.</p></div>
     <div id="composite-schema-results" class="composite-results" hidden>
       <section class="card tree-card" aria-labelledby="composite-tree-heading">
-        <header class="section-heading"><div><p class="eyebrow" id="composite-mode">Шаблон</p><h2 id="composite-tree-heading">Дерево задач</h2></div><div id="composite-instance-result" class="root-result" hidden><span>Ответ</span><strong id="composite-root-answer"></strong></div><p id="composite-schema-meta" class="metadata"></p></header>
+        <header class="section-heading"><div><p class="eyebrow" id="composite-mode">Шаблон</p><h2 id="composite-tree-heading">Дерево задач</h2></div><div id="composite-instance-result" class="root-result" hidden><span>Ответ</span><strong id="composite-root-answer"></strong></div><p id="composite-schema-meta" class="metadata"></p><button id="composite-export-schema" type="button">Скачать шаблон</button></header>
         <p id="composite-tree-help" class="sr-only">Ответы передаются снизу вверх. Нажмите на задачу, чтобы перейти к её условию.</p>
         <div id="composite-tree-viewport" class="tree-viewport" tabindex="0" role="region" aria-labelledby="composite-tree-heading" aria-describedby="composite-tree-help"><svg id="composite-tree" role="img" aria-labelledby="composite-svg-title composite-svg-description"></svg></div>
-        <div class="canvas-footer"><span><i class="legend-dot"></i> Параметры основания <i class="legend-dot internal"></i> Из ответов</span><span>↑ К итоговому ответу</span></div>
       </section>
       <section aria-labelledby="composite-template-heading" class="tasks-section">
-        <header class="section-heading"><h2 id="composite-template-heading">Подзадачи</h2><div class="copy-control"><button id="composite-copy-current" type="button">Копировать условие</button><output id="composite-current-copy-status" class="muted"></output></div></header>
+        <header class="section-heading"><h2 id="composite-template-heading">Подзадачи</h2><div class="copy-control"><button id="composite-copy-current" class="icon-button" type="button" title="Копировать условие" aria-label="Копировать условие"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V4H4v12h4"/></svg></button><output id="composite-current-copy-status" class="muted"></output></div></header>
         <p id="composite-presentation-note" class="muted help" hidden></p>
         <div id="composite-public-template" lang="en" class="problem-text composite-text"></div>
       </section>
-      <details class="technical-details schema-details"><summary>Технические детали</summary><div class="technical-actions"><button id="composite-export-schema" type="button">Скачать JSON схемы</button><div class="copy-control"><button id="composite-copy-template" type="button">Копировать шаблон</button><output id="composite-template-copy-status"></output></div><div class="copy-control"><button id="composite-copy-instance" type="button" disabled>Копировать вариант</button><output id="composite-instance-copy-status"></output></div></div><div id="composite-provenance"></div></details>
     </div>
   </section>
-  <footer class="page-footer">MATH · Точные вычисления в браузере</footer>
 </main>
 </body>
 </html>
