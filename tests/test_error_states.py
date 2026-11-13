@@ -77,7 +77,7 @@ class FrontendErrorStateTests(unittest.TestCase):
         self.assertIn('OK:', output)
 
     def test_structural_fallback_explains_blank_condition_without_pseudoformula(self):
-        output = self.run_case(r''' 
+        output = self.run_case(r'''
           await until(idleAtomic, "initial template");
           change("atomic-subject", "algebra");
           await until(idleAtomic, "algebra subject");
