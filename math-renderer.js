@@ -171,7 +171,8 @@ export const MathPresentation = (() => {
         if (!target.isConnected || !equations.some(({ equation }) => target.contains(equation))) return;
         let overflow = false;
         for (const { equation } of equations) {
-          const wide = equation.scrollWidth > equation.clientWidth + 1;
+          const visualWidth = equation.querySelector(".katex-html")?.getBoundingClientRect().width ?? equation.scrollWidth;
+          const wide = visualWidth > equation.getBoundingClientRect().width + 2;
           if (wide) equation.tabIndex = 0;
           overflow ||= wide;
         }

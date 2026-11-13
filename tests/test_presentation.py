@@ -8,11 +8,11 @@ from support import ensure_runtime
 
 ensure_runtime()
 
-from mathgen.composite import build_schema, instantiate
-from mathgen.composite.profiles import get_catalogue
-from mathgen.composite.schema import canonical
-from mathgen.composite.smart_adapters import evaluate_adapter
-from mathgen.registry import get_template
+from composite_dataset import build_schema, instantiate
+from composite_dataset.profiles import get_catalogue
+from composite_dataset.schema import canonical
+from composite_dataset.smart_adapters import evaluate_adapter
+from template_dataset.registry import get_template
 from math_demo.api import composite_response as respond
 from math_demo.presentation import (
     _adapter_math, _number, _operator_math, _question, _tex_text, presentation,
@@ -33,18 +33,24 @@ class PresentationTests(unittest.TestCase):
         self.assertEqual(before['mode'], 'template')
         self.assertEqual(after['mode'], 'instance')
         native = {n['node_id']: n for n in self.schema['nodes']}
+        trace = {row['node_id']: row for row in item['trace']}
         for a, b in zip(before['nodes'], after['nodes']):
-            if a['kind'] == 'bottom':
-                self.assertTrue(all(i['text'] is None for i in a['inputs']))
-                self.assertTrue(all(type(i['text']) is str for i in b['inputs']))
-                expected = get_template(a['source_id']).render(item['bottom_parameters'][a['node_id']])
-                self.assertEqual(''.join(p['text'] for p in b['segments']), expected)
-                self.assertTrue(all(p['role'] == 'external' and p['filled'] for p in b['segments'] if p['kind'] == 'parameter'))
-            else:
-                self.assertEqual(a, b)
+            row = trace[a['node_id']]
+            self.assertTrue(all(i['text'] is None for i in a['inputs']))
+            self.assertTrue(all(type(i['text']) is str for i in b['inputs']))
+            expected = get_template(a['source_id']).render(row['parameters'])
+            self.assertEqual(''.join(p['text'] for p in b['segments']), expected)
+            self.assertEqual(b['answer'], row['answer'])
+            self.assertIsNone(a['answer'])
+            self.assertTrue(all(p['filled'] for p in b['segments'] if p['kind'] == 'parameter'))
+            if a['kind'] == 'internal':
                 self.assertTrue(a['adapter_math'])
-                self.assertTrue(all(p['role'] == 'internal' and not p['filled'] for p in a['segments'] if p['kind'] == 'parameter'))
-                self.assertEqual(len(native[a['node_id']]['children']), len(native[a['node_id']]['bindings']))
+                self.assertEqual(len(native[a['node_id']]['bindings']), len(b['incoming']))
+                for signal, binding in zip(b['incoming'], native[a['node_id']]['bindings']):
+                    source_answer = trace[binding['source_node']]['answer']
+                    self.assertEqual(signal['answer'], source_answer)
+                    self.assertEqual(signal['value'], str(evaluate_adapter(binding['operator'], source_answer)))
+                    self.assertEqual(signal['source_node'], binding['source_node'])
 
     def test_every_catalogue_leaf_profile_reconstructs_both_endpoints(self):
         for source, profiles in get_catalogue().items():

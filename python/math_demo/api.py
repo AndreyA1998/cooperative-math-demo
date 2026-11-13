@@ -10,16 +10,17 @@ import re
 from secrets import randbits
 from urllib.parse import parse_qs
 
-from mathgen import describe, generate
-from mathgen.composite import build_schema, instantiate
-from mathgen.corpus import load_corpus
-from mathgen.registry import UnsupportedProblemError, registry
-from mathgen.serialization import loads_json
-from .presentation import _presentation_validated, presentation
+from template_dataset import describe, generate
+from composite_dataset import build_schema, instantiate
+from source_dataset.loader import load_corpus
+from template_dataset.registry import UnsupportedProblemError, registry
+from composite_dataset.serialization import loads_json
+from .presentation import _presentation_validated, presentation, atomic_presentation
 
 ATOMIC_ROUTES = {
     "/api/catalogue": set(),
     "/api/describe": {"id"},
+    "/api/template": {"id"},
     "/api/generate": {"id", "seed"},
 }
 BUILD = "/api/composite/build"
@@ -77,6 +78,8 @@ def atomic_response(path, query):
         raise RequestError("Введите ID в формате prealgebra/test/11.")
     if path == "/api/describe":
         return describe(problem_id)
+    if path == "/api/template":
+        return dict(describe(problem_id), presentation=atomic_presentation(problem_id))
 
     seed = _seed(fields["seed"][0]) if "seed" in fields else randbits(64)
     variant = generate(problem_id, seed)
@@ -85,6 +88,7 @@ def atomic_response(path, query):
         name: json.dumps(value, ensure_ascii=False, allow_nan=False)
         for name, value in variant["parameters"].items()
     }
+    variant["presentation"] = atomic_presentation(problem_id, variant["parameters"])
     return variant
 
 
@@ -129,7 +133,7 @@ def _error(status, message):
 def dispatch_json(method, path, query="", body=None):
     """Return ``(status: int, raw_json: str)`` for one browser request.
 
-    GET supports catalogue, describe and generate. POST supports composite
+    GET supports catalogue, describe, template and generate. POST supports composite
     build, instantiate, presentation and variant. The latter returns both the
     exact instance and its display annotations from one instantiation. Invalid
     input returns 400, unknown routes/methods return 404, and failures return 500.

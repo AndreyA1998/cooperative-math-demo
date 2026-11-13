@@ -9,10 +9,10 @@ from support import ensure_runtime
 
 ensure_runtime()
 
-from mathgen import solve as atomic_solve
-from mathgen.composite import build_schema, instantiate, solve
-from mathgen.composite.profiles import get_catalogue
-from mathgen.registry import registry
+from template_dataset import solve as atomic_solve
+from composite_dataset import build_schema, instantiate, solve
+from composite_dataset.profiles import get_catalogue
+from template_dataset.registry import registry
 from math_demo.api import dispatch_json
 
 PROBLEM_ID = "prealgebra/test/11"
@@ -53,6 +53,17 @@ class AtomicApiTests(unittest.TestCase):
         status, description = self.get("describe", id=PROBLEM_ID)
         self.assertEqual(status, 200)
         self.assertEqual(set(variant["parameters"]), set(description["parameters"]))
+
+    def test_template_starts_bare_and_generation_fills_named_slots(self):
+        status, bare = self.get("template", id=PROBLEM_ID)
+        self.assertEqual(status, 200)
+        self.assertEqual(bare["presentation"]["mode"], "template")
+        self.assertTrue(all(i["text"] is None for i in bare["presentation"]["inputs"]))
+        status, filled = self.get("generate", id=PROBLEM_ID, seed=MAX_SEED)
+        self.assertEqual(status, 200)
+        self.assertEqual(filled["presentation"]["mode"], "instance")
+        self.assertEqual("".join(p["text"] for p in filled["presentation"]["segments"]), filled["problem"])
+        self.assertEqual(self.get("template", id=PROBLEM_ID)[1], bare)
 
     def test_random_seed_is_replayable(self):
         with patch("math_demo.api.randbits", return_value=int(MAX_SEED)):
@@ -183,7 +194,7 @@ class CompositeApiTests(unittest.TestCase):
             for profile in profiles:
                 for name in ("numerator", "denominator", "divisor"):
                     profile["classifier"][name] *= 2**100 + 1
-        with patch("mathgen.composite.profiles.get_catalogue", return_value=catalogue):
+        with patch("composite_dataset.profiles.get_catalogue", return_value=catalogue):
             status, raw_schema = dispatch_json("POST", BUILD, body=json.dumps(STRUCTURE))
         self.assertEqual(status, 200)
         expected = json.loads(raw_schema)

@@ -12,9 +12,9 @@ from support import (
 ensure_runtime()
 
 from math_demo.api import dispatch_json
-from mathgen.composite import build_schema
-from mathgen.composite.profiles import get_catalogue
-from mathgen.registry import registry
+from composite_dataset import build_schema
+from composite_dataset.profiles import get_catalogue
+from template_dataset.registry import registry
 
 MAX_SEED = "18446744073709551615"
 
@@ -34,9 +34,9 @@ class BrowserRuntimeTests(unittest.TestCase):
         cls.addClassCleanup(cls.temporary.cleanup)
         cls.runner = compile_webkit(cls.temporary.name)
 
-    def run_case(self, script, *, suffix="", fail_once=()):
+    def run_case(self, script, *, suffix="", fail_once=(), timeout=240):
         with static_origin(fail_once=fail_once) as server:
-            output = run_webkit(self.runner, server.url + suffix, script)
+            output = run_webkit(self.runner, server.url + suffix, script, timeout=timeout)
             self.assertIn("OK", output)
             self.assertTrue(any(path.endswith("/worker.js") for _, path in server.requests))
             self.assertTrue(any(path.endswith("/runtime.zip") for _, path in server.requests))
@@ -98,7 +98,7 @@ class BrowserRuntimeTests(unittest.TestCase):
           check(digest === fixtures.atomicCatalogueDigest,
                 "Full atomic catalogue differs between native Python and WASM: " + digest);
           return "OK: actual WASM matches native for " + fixtures.ids.length + " atomic IDs and exact raw composite JSON";
-        ''')
+        ''', timeout=900)
 
     def test_atomic_controls_replay_exact_seed_and_tabs_preserve_state(self):
         self.run_case(r'''
@@ -118,8 +118,12 @@ class BrowserRuntimeTests(unittest.TestCase):
           check($("atomic-problem-text").textContent === previous, "Tab switch discarded the atomic task");
           check(new URL(location.href).searchParams.get("seed") === "0", "Tab switch discarded replay parameters");
           change("atomic-subject", "prealgebra");
+          await until(idleAtomic, "subject pattern");
           change("atomic-split", "test");
+          await until(idleAtomic, "split pattern");
           change("atomic-problem-id", "prealgebra/test/11");
+          await until(idleAtomic, "selected pattern");
+          if (!$("atomic-seed-mode").checked) $("atomic-seed-mode").click();
           const options = [...$("atomic-problem-id").options];
           check(options.every((option, index) => option.value.startsWith("prealgebra/test/")
             && /^\d+$/.test(option.text)
@@ -139,6 +143,7 @@ class BrowserRuntimeTests(unittest.TestCase):
           await until(idleAtomic, "random filtered task");
           check($("atomic-problem-id").value === options[0].value, "Random task ignored active filters");
           check(!$("atomic-seed-mode").checked && $("atomic-seed-setting").hidden, "Random task kept replay mode");
+          check($("atomic-answer-value").textContent === "—" && !$("atomic-params").querySelector(".slot-filled"), "Random selection filled numbers before the separate action");
           return "OK: atomic controls, exact seed, visible answer and persistent tabs";
         ''', suffix="?id=algebra%2Ftrain%2F1316&seed=0#atomic")
 
@@ -189,8 +194,8 @@ class BrowserRuntimeTests(unittest.TestCase):
           $("composite-parameter-seed").value = "18446744073709551615";
           $("composite-parameter-random").click();
           await until(() => idleComposite() && !$("composite-instance-result").hidden, "real parameter variant");
-          check($("composite-root-answer").textContent === "Ответ " + expected.answer, "Wrong exact root answer");
-          check($("composite-public-instance").querySelector(".slot-filled"), "Bottom values were not filled");
+          check($("composite-root-answer").textContent === expected.answer, "Wrong exact root answer");
+          check(template.querySelector(".slot-filled"), "Bottom values were not filled");
           copied = undefined;
           $("composite-copy-instance").click();
           await until(() => copied !== undefined, "copy model instance");
@@ -199,17 +204,17 @@ class BrowserRuntimeTests(unittest.TestCase):
           $("atomic-tab").click();
           $("composite-tab").click();
           check(!$("composite-instance-result").hidden, "Tab switch discarded a composite variant");
-          $("composite-solution").open = true;
+          check($("composite-root-answer").getBoundingClientRect().height > 0, "Answer is not visible");
           reset.click();
-          check($("composite-instance-result").hidden && $("composite-instance-link").hidden, "Reset kept a stale variant");
-          check(!$("composite-root-answer").textContent && !$("composite-solution-trace").textContent
-            && !$("composite-public-instance").textContent && !$("composite-solution").open, "Reset retained answer or trace");
+          check($("composite-instance-result").hidden, "Reset kept a stale variant");
+          check(!$("composite-root-answer").textContent && !template.querySelector(".subproblem-answer, .slot-filled"), "Reset retained answer or values");
+          await until(() => [...template.querySelectorAll(".math-fragment")].every(node => node.hasAttribute("data-rendered")) || !$("composite-presentation-note").hidden, "reset typesetting", {timeout: 20000});
           check(template.textContent === templateBefore && $("composite-tree").innerHTML === treeBefore,
                 "Reset changed the schema or placeholders");
           check(reset.disabled && !$("composite-parameter-controls").disabled, "Cannot regenerate after reset");
           $("composite-parameter-random").click();
           await until(() => idleComposite() && !$("composite-instance-result").hidden, "replay after reset");
-          check($("composite-root-answer").textContent === "Ответ " + expected.answer, "Reset broke seed replay");
+          check($("composite-root-answer").textContent === expected.answer, "Reset broke seed replay");
           const {MathPresentation} = await import("./math-renderer.js");
           const originalRender = MathPresentation.render;
           const pending = [];
@@ -224,8 +229,7 @@ class BrowserRuntimeTests(unittest.TestCase):
           reset.click();
           pending.splice(0).forEach(resolve => resolve(false));
           await new Promise(resolve => setTimeout(resolve, 50));
-          check($("composite-instance-presentation-note").hidden && $("composite-instance-result").hidden
-            && !$("composite-public-instance").textContent, "Late rendering restored discarded state after reset");
+          check($("composite-instance-result").hidden && !template.querySelector(".subproblem-answer, .slot-filled"), "Late rendering restored discarded state after reset");
           MathPresentation.render = originalRender;
           $("composite-depth").value = "1";
           $("composite-width").value = "300";

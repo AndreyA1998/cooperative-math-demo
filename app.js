@@ -4,184 +4,216 @@ import { MathPresentation } from "./math-renderer.js";
 const byId = (id) => document.getElementById("atomic-" + id);
 const catalogueControls = byId("catalogue-controls");
 const idSelect = byId("problem-id");
-const randomButton = byId("generate-random");
 const subjectSelect = byId("subject");
 const splitSelect = byId("split");
 const seedInput = byId("seed");
 const seedMode = byId("seed-mode");
-const problemText = byId("problem-text");
-const parameters = byId("params");
-const status = byId("status");
-
-const subjectNames = {
-  algebra: "Алгебра",
-  counting_and_probability: "Комбинаторика и вероятность",
-  geometry: "Геометрия",
-  intermediate_algebra: "Продвинутая алгебра",
-  number_theory: "Теория чисел",
-  prealgebra: "Начальная алгебра",
-  precalculus: "Предварительный курс анализа",
-};
-const formatSubject = (subject) => subjectNames[subject] ?? subject;
-const formatNumber = new Intl.NumberFormat("ru");
+const subjectNames = { algebra: "Алгебра", counting_and_probability: "Комбинаторика и вероятность", geometry: "Геометрия", intermediate_algebra: "Продвинутая алгебра", number_theory: "Теория чисел", prealgebra: "Начальная алгебра", precalculus: "Предварительный курс анализа" };
 const taskNumber = (id) => id.slice(id.lastIndexOf("/") + 1);
-
+const groups = new Map();
+const tasks = new Map();
 let catalogue = [];
-let currentVariant;
+let activeGroup;
+let activeId;
 let initialising = false;
+let revision = 0;
 
 async function getJSON(action, fields) {
-  const query = new URLSearchParams(fields).toString();
-  const { data } = await request("GET", "/api/" + action, query);
-  return data;
+  return (await request("GET", "/api/" + action, new URLSearchParams(fields).toString())).data;
 }
-
 function showStatus(message, error = false) {
-  status.textContent = message;
-  status.classList.toggle("error", error);
-  status.hidden = !message;
+  byId("status").textContent = message;
+  byId("status").classList.toggle("error", error);
+  byId("status").hidden = !message;
 }
-
-function filterCatalogue(preferredId = idSelect.value) {
-  const subject = subjectSelect.value;
-  const split = splitSelect.value;
-  const matches = catalogue
-    .filter((problem) => problem.subject === subject && problem.split === split)
-    .sort((a, b) => Number(taskNumber(a.id)) - Number(taskNumber(b.id)));
-  const options = matches.map(({ id }) => new Option(taskNumber(id), id));
-  const empty = options.length === 0;
-  if (empty) {
-    options.push(new Option("Нет подходящих задач", ""));
-  }
-  idSelect.replaceChildren(...options);
-  if (matches.some(({ id }) => id === preferredId)) {
-    idSelect.value = preferredId;
-  }
-  byId("catalogue-count").textContent = empty
-    ? "В этом разделе и выборке нет задач. Выберите другой раздел или выборку."
-    : "Задач в разделе: " + formatNumber.format(matches.length);
-  byId("generate").disabled = empty;
-  randomButton.disabled = empty;
-}
-
 function setSeedMode(checked) {
   seedMode.checked = checked;
   byId("seed-setting").hidden = !checked;
   seedInput.disabled = !checked;
 }
-
-function showVariant(variant) {
-  currentVariant = variant;
-  byId("placeholder").hidden = true;
-  const metadata = byId("problem-meta");
-  metadata.textContent = formatSubject(variant.subject) + " · №" + taskNumber(variant.id) + " · " + variant.split;
-  metadata.hidden = false;
-  problemText.textContent = variant.problem;
-  problemText.hidden = false;
-
-  const answer = byId("answer");
-  byId("answer-value").textContent = variant.answer;
-  answer.hidden = false;
-
-  const rows = Object.entries(variant.parameters).map(([name, value]) => {
-    const row = document.createElement("div");
-    const term = document.createElement("dt");
-    const detail = document.createElement("dd");
-    term.textContent = name;
-    detail.textContent = variant.parameter_display?.[name] ?? JSON.stringify(value);
-    row.append(term, detail);
-    return row;
-  });
-  parameters.replaceChildren(...rows);
-  parameters.hidden = false;
-  byId("params-placeholder").hidden = true;
-  const version = byId("version");
-  version.textContent = "Версия генератора " + variant.generator_version;
-  version.hidden = false;
-  seedInput.value = variant.seed;
-
-  const url = new URL(window.location.href);
-  url.search = new URLSearchParams({ id: variant.id, seed: variant.seed });
-  window.history.replaceState(null, "", url);
-
-  const note = byId("renderer-note");
-  note.hidden = true;
-  void MathPresentation.render(problemText, [{ kind: "text", text: variant.problem }]).then((rendered) => {
-    if (currentVariant !== variant) return;
-    note.textContent = "Формулы, которые не удалось оформить, показаны в исходной записи LaTeX.";
-    note.hidden = rendered;
-  });
+function remember() {
+  const state = tasks.get(activeId);
+  if (state) Object.assign(state, { seed: seedInput.value, seedMode: seedMode.checked });
+  if (activeGroup && activeId) groups.set(activeGroup, activeId);
 }
-
-async function generateVariant(seed) {
-  if (!idSelect.value || catalogueControls.disabled) {
-    return;
-  }
-  const fields = { id: idSelect.value };
-  if (seed !== undefined) {
-    fields.seed = seed;
-  }
+function filterCatalogue(preferredId) {
+  activeGroup = subjectSelect.value + "/" + splitSelect.value;
+  const matches = catalogue.filter((entry) => entry.subject === subjectSelect.value && entry.split === splitSelect.value)
+    .sort((a, b) => Number(taskNumber(a.id)) - Number(taskNumber(b.id)));
+  idSelect.replaceChildren(...matches.map(({ id }) => new Option(taskNumber(id), id)));
+  const remembered = preferredId ?? groups.get(activeGroup);
+  if (matches.some(({ id }) => id === remembered)) idSelect.value = remembered;
+  byId("catalogue-count").textContent = matches.length ? `${new Intl.NumberFormat("ru").format(matches.length)} задач в разделе` : "В этом разделе нет задач.";
+  byId("generate").disabled = !matches.length;
+  byId("generate-random").disabled = !matches.length;
+}
+function updateURL(state) {
+  const url = new URL(window.location.href);
+  url.search = new URLSearchParams(state.variant ? { id: activeId, seed: state.variant.seed } : { id: activeId });
+  window.history.replaceState(null, "", url);
+}
+function renderTask(state) {
+  const token = ++revision;
+  const variant = state.variant;
+  const content = variant ?? state.template;
+  const presentation = content.presentation;
+  const text = byId("problem-text");
+  byId("placeholder").hidden = true;
+  text.hidden = false;
+  byId("mode").textContent = variant ? "Вариант" : "Шаблон";
+  byId("problem-title").textContent = "Задача № " + taskNumber(activeId);
+  byId("problem-meta").textContent = activeId;
+  byId("version").textContent = content.generator_version ? "Генератор " + content.generator_version : "";
+  byId("template-notes").textContent = presentation?.notes?.join("\n") ?? "";
+  byId("answer-value").textContent = variant?.answer ?? "—";
+  byId("reset").disabled = !variant;
+  byId("copy-status").textContent = "";
+  byId("copy").disabled = false;
+  const chips = (presentation?.inputs ?? []).map((input) => {
+    const chip = document.createElement("span");
+    chip.className = "input-chip";
+    const label = document.createElement("span");
+    label.className = "input-name";
+    label.textContent = input.text === null ? "" : input.name + " = ";
+    const value = document.createElement("span");
+    value.className = "parameter-slot slot-external" + (input.text !== null ? " slot-filled" : "");
+    value.dataset.parameter = input.key;
+    value.textContent = input.text ?? input.name;
+    chip.append(label, value);
+    return chip;
+  });
+  byId("params").replaceChildren(...chips);
+  byId("params").hidden = !chips.length;
+  setSeedMode(state.seedMode ?? false);
+  seedInput.value = state.seed ?? "";
+  byId("renderer-note").hidden = true;
+  const segments = !variant && presentation?.scope === "computed-statement"
+    ? [{ kind: "text", text: "Условие появится после заполнения параметров." }]
+    : presentation?.segments ?? [{ kind: "text", text: content.problem ?? content.problem_template ?? content.template ?? "" }];
+  void MathPresentation.render(text, segments).then((rendered) => {
+    if (token !== revision) return;
+    byId("renderer-note").textContent = "Часть формул показана в исходной записи LaTeX.";
+    byId("renderer-note").hidden = rendered;
+  });
+  updateURL(state);
+}
+async function selectTask() {
+  remember();
+  activeId = idSelect.value;
+  if (!activeId) return;
+  groups.set(activeGroup, activeId);
+  let state = tasks.get(activeId);
+  if (state) { renderTask(state); showStatus(""); return; }
+  const id = activeId;
+  const token = ++revision;
+  byId("problem-text").hidden = true;
+  byId("params").hidden = true;
+  byId("placeholder").hidden = false;
+  byId("placeholder").textContent = "Загружаем шаблон…";
+  byId("problem-title").textContent = "Задача № " + taskNumber(id);
+  byId("mode").textContent = "Шаблон";
+  byId("answer-value").textContent = "—";
+  byId("reset").disabled = true;
+  byId("copy").disabled = true;
+  byId("renderer-note").hidden = true;
   catalogueControls.disabled = true;
-  showStatus("Генерируем вариант…");
+  showStatus("Загружаем шаблон…");
+  try {
+    const template = await getJSON("template", { id });
+    state = { template, variant: null, seed: "", seedMode: false };
+    tasks.set(id, state);
+    if (id === activeId && revision === token) { renderTask(state); showStatus(""); }
+  } catch (error) {
+    if (id === activeId) {
+      byId("placeholder").textContent = "Нажмите «Заполнить числа», чтобы повторить загрузку шаблона.";
+      showStatus(error.message || "Не удалось загрузить шаблон.", true);
+    }
+  } finally { catalogueControls.disabled = false; }
+}
+async function changeFilter() {
+  remember();
+  // Clear the old identity before selecting within the next subject/split group.
+  activeId = undefined;
+  filterCatalogue();
+  await selectTask();
+}
+async function generateVariant(seed) {
+  if (!activeId || catalogueControls.disabled) return;
+  if (!tasks.has(activeId)) {
+    await selectTask();
+    if (!tasks.has(activeId)) return;
+    const recovered = tasks.get(activeId);
+    recovered.seedMode = seed !== undefined;
+    if (seed !== undefined) recovered.seed = seed;
+    setSeedMode(recovered.seedMode);
+    seedInput.value = recovered.seed;
+  }
+  remember();
+  const id = activeId;
+  const fields = seed === undefined ? { id } : { id, seed };
+  catalogueControls.disabled = true;
+  showStatus("Вычисляем…");
   try {
     const variant = await getJSON("generate", fields);
-    showVariant(variant);
+    const state = tasks.get(id);
+    state.variant = variant;
+    state.seed = variant.seed;
+    if (activeId === id) renderTask(state);
     showStatus("");
-  } catch (error) {
-    showStatus(error.message || "Не удалось сгенерировать вариант.", true);
-  } finally {
-    catalogueControls.disabled = false;
-  }
+  } catch (error) { showStatus(error.message || "Не удалось заполнить числа.", true); }
+  finally { catalogueControls.disabled = false; }
 }
-
 async function init() {
   if (initialising || catalogue.length) return;
   initialising = true;
   try {
-    const data = await getJSON("catalogue");
-    catalogue = data.problems;
-  } catch {
-    initialising = false;
-    byId("catalogue-count").textContent = "Каталог недоступен.";
-    showStatus("Не удалось загрузить каталог. Повторите загрузку в строке состояния выше.", true);
-    return;
-  }
-
-  initialising = false;
-  showStatus("");
-  const subjects = new Set(catalogue.map(({ subject }) => subject));
-  for (const subject of subjects) {
-    subjectSelect.add(new Option(formatSubject(subject), subject));
-  }
-  const query = new URLSearchParams(window.location.search);
-  const requestedId = query.get("id");
-  const requestedTask = catalogue.find(({ id }) => id === requestedId);
-  subjectSelect.value = requestedTask?.subject ?? (subjects.has("prealgebra") ? "prealgebra" : subjectSelect.value);
-  splitSelect.value = requestedTask?.split ?? "test";
-  filterCatalogue(requestedTask?.id ?? "prealgebra/test/11");
-  catalogueControls.disabled = false;
-
-  if (requestedId && !requestedTask) {
-    showStatus("Задача из ссылки отсутствует в каталоге.", true);
-  } else if (requestedId && query.has("seed")) {
-    setSeedMode(true);
-    seedInput.value = query.get("seed");
-    await generateVariant(seedInput.value);
-  }
+    catalogue = (await getJSON("catalogue")).problems;
+    const subjects = [...new Set(catalogue.map(({ subject }) => subject))];
+    subjectSelect.replaceChildren(...subjects.map((subject) => new Option(subjectNames[subject] ?? subject, subject)));
+    const query = new URLSearchParams(window.location.search);
+    const requestedId = query.get("id");
+    const requested = catalogue.find(({ id }) => id === requestedId);
+    subjectSelect.value = requested?.subject ?? (subjects.includes("prealgebra") ? "prealgebra" : subjects[0]);
+    splitSelect.value = requested?.split ?? "test";
+    filterCatalogue(requested?.id ?? "prealgebra/test/11");
+    catalogueControls.disabled = false;
+    await selectTask();
+    if (requested && query.has("seed")) {
+      setSeedMode(true);
+      seedInput.value = query.get("seed");
+      await generateVariant(seedInput.value);
+    } else if (requestedId && !requested) showStatus("Задача из ссылки отсутствует в каталоге.", true);
+  } catch { showStatus("Не удалось загрузить каталог. Повторите загрузку выше.", true); }
+  finally { initialising = false; }
 }
-
-seedMode.addEventListener("change", () => setSeedMode(seedMode.checked));
-subjectSelect.addEventListener("change", () => filterCatalogue());
-splitSelect.addEventListener("change", () => filterCatalogue());
-
-byId("generator").addEventListener("submit", (event) => {
-  event.preventDefault();
-  void generateVariant(seedMode.checked ? seedInput.value : undefined);
-});
-randomButton.addEventListener("click", () => {
-  setSeedMode(false);
+seedMode.addEventListener("change", () => { setSeedMode(seedMode.checked); remember(); });
+subjectSelect.addEventListener("change", () => { void changeFilter(); });
+splitSelect.addEventListener("change", () => { void changeFilter(); });
+idSelect.addEventListener("change", () => { void selectTask(); });
+byId("generator").addEventListener("submit", (event) => { event.preventDefault(); void generateVariant(seedMode.checked ? seedInput.value : undefined); });
+byId("generate-random").addEventListener("click", async () => {
+  remember();
   idSelect.selectedIndex = Math.floor(Math.random() * idSelect.options.length);
-  void generateVariant();
+  await selectTask();
+  const state = tasks.get(activeId);
+  if (!state) return;
+  state.variant = null;
+  state.seedMode = false;
+  renderTask(state);
+});
+byId("reset").addEventListener("click", () => {
+  remember();
+  const state = tasks.get(activeId);
+  if (!state) return;
+  state.variant = null;
+  renderTask(state);
+});
+byId("copy").addEventListener("click", async () => {
+  const state = tasks.get(activeId);
+  if (!state) return;
+  const text = state.variant?.problem ?? state.template.problem_template ?? state.template.presentation.segments.map(({ text }) => text).join("");
+  try { await navigator.clipboard.writeText(text); byId("copy-status").textContent = "Скопировано"; }
+  catch { byId("copy-status").textContent = "Не удалось скопировать. Выделите условие вручную."; }
 });
 window.addEventListener("math-runtime-ready", () => { void init(); });
 void init();

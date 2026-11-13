@@ -78,7 +78,7 @@ class RendererBrowserTests(unittest.TestCase):
         # generation and WASM transport are independently exercised in test_browser.
         from support import ensure_runtime
         ensure_runtime()
-        from mathgen.composite import build_schema, instantiate
+        from composite_dataset import build_schema, instantiate
         from math_demo.presentation import presentation
         schema = build_schema(2, 3, 42)
         fixture = {"schema": schema, "template": presentation(schema),
@@ -92,6 +92,8 @@ class RendererBrowserTests(unittest.TestCase):
               let payload;
               if (message.path === "/api/catalogue") {
                 payload = {problems: [{id: "prealgebra/test/11", split: "test", subject: "prealgebra"}]};
+              } else if (message.path === "/api/template") {
+                payload = {presentation: {inputs: [], segments: [{kind: "text", text: "Pattern"}], notes: []}};
               } else if (message.path === "/api/composite/build") {
                 payload = {...fixture.schema, seed: fields.seed, requested_width: fields.width,
                   requested_allow_template_reuse: fields.allow_template_reuse,

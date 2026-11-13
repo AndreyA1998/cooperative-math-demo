@@ -27,7 +27,8 @@ class BuildTests(unittest.TestCase):
         for name in self.builder.ASSETS:
             (root / name).write_text('fixture\n')
         files = {name: b'# packaged fixture\n' for name in (
-            'mathgen/__init__.py', 'math_demo/__init__.py',
+            'source_dataset/__init__.py', 'template_dataset/__init__.py',
+            'composite_dataset/__init__.py', 'math_demo/__init__.py',
             'math_demo/api.py', 'math_demo/presentation.py')}
         with zipfile.ZipFile(root / 'runtime.zip', 'w') as archive:
             for name, contents in files.items():
@@ -52,13 +53,14 @@ from pathlib import Path
 import unittest
 from support import ensure_runtime
 ensure_runtime()
-import mathgen
+import source_dataset, template_dataset, composite_dataset
 import math_demo.api
 Path(__file__).with_name('probe.started').write_text('yes')
 class Origins(unittest.TestCase):
     def test_imports_are_from_the_unpacked_runtime(self):
         package = Path(os.environ['PYTHONPATH'].split(os.pathsep)[-1]).resolve()
-        self.assertEqual(Path(mathgen.__file__).resolve().parents[1], package)
+        for module in (source_dataset, template_dataset, composite_dataset):
+            self.assertEqual(Path(module.__file__).resolve().parents[1], package)
         self.assertEqual(Path(math_demo.api.__file__).resolve().parents[1], package)
 ''')
         return manifest
@@ -83,7 +85,7 @@ class Origins(unittest.TestCase):
             for name in names - {'.nojekyll'}:
                 self.assertEqual((ROOT / name).read_bytes(), (output / name).read_bytes())
 
-    def test_check_imports_both_math_packages_from_the_verified_archive(self):
+    def test_check_imports_all_dataset_packages_from_the_verified_archive(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder) / 'source'
             self.runtime_fixture(root)
@@ -117,7 +119,7 @@ class Origins(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder) / 'source'
             manifest = self.runtime_fixture(root)
-            manifest['files']['mathgen/__init__.py'] = '0' * 64
+            manifest['files']['template_dataset/__init__.py'] = '0' * 64
             (root / 'runtime.json').write_text(json.dumps(manifest))
             with self.assertRaises(ValueError):
                 self.builder.build(root, Path(folder) / 'site')
@@ -128,7 +130,7 @@ class Origins(unittest.TestCase):
                 root = Path(folder) / 'source'
                 manifest = self.runtime_fixture(root)
                 if mismatch == 'missing':
-                    manifest['files'].pop('mathgen/__init__.py')
+                    manifest['files'].pop('template_dataset/__init__.py')
                 elif mismatch == 'extra':
                     manifest['files']['missing.py'] = '0' * 64
                 else:
@@ -136,7 +138,7 @@ class Origins(unittest.TestCase):
                     with warnings.catch_warnings():
                         warnings.simplefilter('ignore', UserWarning)
                         with zipfile.ZipFile(root / 'runtime.zip', 'a') as archive:
-                            archive.writestr('mathgen/__init__.py', b'# duplicate\n')
+                            archive.writestr('template_dataset/__init__.py', b'# duplicate\n')
                     raw = (root / 'runtime.zip').read_bytes()
                     manifest.update(bytes=len(raw), sha256=sha256(raw).hexdigest())
                 (root / 'runtime.json').write_text(json.dumps(manifest))
@@ -148,19 +150,21 @@ class Origins(unittest.TestCase):
             root = Path(folder) / 'source'
             self.runtime_fixture(root)
             private = Path(folder) / 'private'
-            (private / 'mathgen').mkdir(parents=True)
-            (private / 'mathgen/__init__.py').write_text('# private fixture\n')
+            for name in ('source_dataset', 'template_dataset', 'composite_dataset'):
+                (private / name).mkdir(parents=True)
+                (private / name / '__init__.py').write_text('# private fixture\n')
             script = '''import sys
 from pathlib import Path
 sys.path.insert(0, 'tests')
 from support import ensure_runtime
 ensure_runtime()
-import mathgen, math_demo.api
-assert Path(mathgen.__file__).resolve() == Path(sys.argv[1]).resolve()
+import source_dataset, template_dataset, composite_dataset, math_demo.api
+for module in (source_dataset, template_dataset, composite_dataset):
+    assert Path(module.__file__).resolve().parents[1] == Path(sys.argv[1]).resolve()
 assert Path(math_demo.api.__file__).resolve() == Path('python/math_demo/api.py').resolve()
 '''
             result = subprocess.run([sys.executable, '-B', '-c', script,
-                                     str(private / 'mathgen/__init__.py')], cwd=root,
+                                     str(private)], cwd=root,
                                     env=dict(os.environ, PYTHONPATH=str(private), PYTHONDONTWRITEBYTECODE='1'),
                                     capture_output=True, text=True, timeout=30)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)

@@ -1,0 +1,135 @@
+{
+  "checked_at": "2026-11-13T12:59:19.995171+00:00",
+  "status": "passed",
+  "runtime_archive_sha256": "843a3c9f803b84d6db09db0fa0d66b99e98c1b9ddbc23b187973fe0733c7c3ab",
+  "runtime_archive_bytes": 2319357,
+  "frontend_sha256": {
+    "index.html": "1b8288e54135bfcb8aa82e4db6814d4c170f4587f09db2dfabfed96debf0ba36",
+    "styles.css": "513f42011f790be730889776c7b5bba76da0dd82c813401de4785c7e3f0cc045",
+    "composite.css": "64fe8d934205e9a3bcabf31b4276866b609a561039b9613487933d2244042590",
+    "app.js": "f643d2fd16875dd54bffc037e8bbc17156dd4b683e7afe37ef1bb5f494ab5dfa",
+    "composite.js": "43155be59b906199762bd8ddc984bbc3145ff5640175f1285bc4222b7c8e8550",
+    "math-renderer.js": "33b68b8721cb47525ad1e76ac130ea125254b028c0fd68875c9529306705263c",
+    "main.js": "3edf3444a58c7763930b7eb82d228d33631900e4ab1652f61b8539280f6fafd2"
+  },
+  "runs": [
+    {
+      "command": "python3 -B -m unittest -v test_browser test_visual_state test_layout",
+      "cwd": "tests",
+      "passed": 6,
+      "failed": 0,
+      "elapsed_seconds": 385.628,
+      "browser": "macOS WebKit with real Pyodide",
+      "coverage": [
+        "All 4286 atomic IDs: WASM raw output equals native Python digest",
+        "Exact uint64 strings and raw large-integer schema import/export",
+        "Canonical model copy for bare schema and filled instance",
+        "Initial atomic pattern, separate fill, reset, random bare task",
+        "Subject/split/task cache and top-tab persistence",
+        "In-place composite node answers, incoming values, joint target parameters",
+        "Runtime download failure and retry",
+        "390px controls, math scrolling and no page overflow"
+      ]
+    },
+    {
+      "command": "python3 -B -m unittest discover -s tests -p test_renderer.py -v",
+      "passed": 3,
+      "failed": 0,
+      "elapsed_seconds": 16.13,
+      "coverage": [
+        "Real KaTeX and boxed symbolic/filled math",
+        "Readable safe text fallback when rendering fails",
+        "Automatic reuse notice preserves user preference"
+      ]
+    },
+    {
+      "command": "node --test tests/*.test.mjs",
+      "passed": 9,
+      "failed": 0,
+      "node_executable": "/Users/a.v.anokhin/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node",
+      "coverage": [
+        "Worker lifecycle, retry, stale messages, watchdog and exact raw JSON"
+      ]
+    },
+    {
+      "command": "python3 -B -m unittest discover -s tests -p test_error_states.py -v",
+      "passed": 3,
+      "failed": 0,
+      "elapsed_seconds": 81.633,
+      "independent_reviewer": "dataset_demo_bridge",
+      "report": "reports/frontend-review.json",
+      "coverage": [
+        "Missing atomic template: disabled stale actions, Fill recovery, prior task cache",
+        "Composite presentation failure: successful variant then reset clears all values",
+        "Computed-statement fallback: plain explanation, chips, exact filled question, reset"
+      ]
+    },
+    {
+      "command": "node --check app.js; node --check composite.js; node --check math-renderer.js; git diff --check",
+      "status": "passed"
+    }
+  ],
+  "limits": {
+    "normal_browser_case_timeout_seconds": 240,
+    "exhaustive_4286_id_case_timeout_seconds": 900,
+    "initial_exhaustive_run": "The previous 240-second bound expired. The complete 4286-ID comparison passed after increasing only this exhaustive case limit.",
+    "platform": "Browser tests use native macOS WebKit; other platforms explicitly skip them.",
+    "network": "Browser runtime and KaTeX use their pinned CDN URLs; the static origin receives no API POSTs."
+  },
+  "visual_checks": {
+    "desktop_viewports_css_pixels": [
+      [
+        1280,
+        1000
+      ],
+      [
+        1280,
+        1200
+      ]
+    ],
+    "mobile_viewport_css_pixels": [
+      390,
+      1000
+    ],
+    "states": [
+      "bare",
+      "filled",
+      "reset"
+    ],
+    "card_views": [
+      "leaf",
+      "internal"
+    ],
+    "card_captures": 12,
+    "schema_seed": "42",
+    "parameter_seed": "7",
+    "reviewed": [
+      "Compact tree with only local numbers and actual values",
+      "Visible per-card and final answers",
+      "Internal target parameters replace placeholders",
+      "Bare reset restores symbolic slots",
+      "Long formulas scroll inside cards"
+    ],
+    "artifacts": "Temporary screenshots were inspected and are not tracked. Final small correction labels incoming filled signals u1/u2 explicitly and detects overflow from visible KaTeX HTML width."
+  },
+  "references": [
+    {
+      "url": "https://reactflow.dev/examples/layout/dagre",
+      "application": "Consistent tree levels, restrained nodes and curved connections; implemented with existing native SVG."
+    },
+    {
+      "url": "https://observablehq.com/@d3/tidy-tree",
+      "application": "Even leaf spacing and centered parent nodes; reduced labels to preserve the hierarchy."
+    }
+  ],
+  "dependencies": "No framework, local environment or package cache installed; existing worker/RPC/transport preserved.",
+  "source_commit": "5a446c461ed33560d06ce17b80d39832d0873d8a",
+  "runtime_sha256": "843a3c9f803b84d6db09db0fa0d66b99e98c1b9ddbc23b187973fe0733c7c3ab",
+  "native_bundle_suite": {
+    "tests": 41,
+    "failures": 0,
+    "errors": 0,
+    "seconds": 41.161,
+    "command": "PYTHONPATH=tests python3 -B -m unittest test_api test_atomic_presentation test_build test_export test_presentation -v"
+  }
+}

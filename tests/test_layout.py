@@ -68,14 +68,20 @@ class MobileLayoutTests(unittest.TestCase):
           mobile.Math.random = () => 0;
           at("atomic-generate-random").click();
           await waitFor(() => atomicIdle() && !at("atomic-problem-text").hidden, "mobile random task");
-          check(!at("atomic-answer").hidden && at("atomic-answer-value").textContent,
-                "Random atomic answer is not visible");
+          check(!at("atomic-answer").hidden && at("atomic-answer-value").textContent === "—",
+                "Random task should show a bare pattern with an answer placeholder");
+          at("atomic-generate").click();
+          await waitFor(atomicIdle, "mobile filled random task");
+          check(at("atomic-answer-value").textContent !== "—", "Filled atomic answer is not visible");
           noOverflow("random atomic task");
 
           // A native problem with a long, exact integer inside a TeX formula.
           changeField("atomic-subject", "algebra");
+          await waitFor(atomicIdle, "subject pattern");
           changeField("atomic-split", "train");
+          await waitFor(atomicIdle, "split pattern");
           changeField("atomic-problem-id", "algebra/train/1316");
+          await waitFor(atomicIdle, "selected pattern");
           at("atomic-seed-mode").click();
           check(!at("atomic-seed-setting").hidden && !at("atomic-seed").disabled,
                 "Mobile atomic seed checkbox does not expose a usable input");
@@ -120,13 +126,12 @@ class MobileLayoutTests(unittest.TestCase):
           at("composite-parameter-seed").value = "18446744073709551615";
           at("composite-parameter-random").click();
           await waitFor(() => compositeIdle() && !at("composite-instance-result").hidden, "mobile real variant");
-          await settledMath("composite-public-instance", "composite-instance-presentation-note");
-          check(at("composite-public-instance").querySelector(".slot-filled"), "Mobile variant has no filled inputs");
+          await settledMath("composite-public-template", "composite-presentation-note");
+          check(at("composite-public-template").querySelector(".slot-filled"), "Mobile variant has no filled inputs");
           check(at("composite-parameter-seed").value === "18446744073709551615", "Mobile seed input lost digits");
-          at("composite-solution").open = true;
           inside("composite-root-answer");
           noOverflow("filled composite variant and solution");
-          inside("composite-copy-instance");
+          inside("composite-copy-current");
           at("atomic-tab").click();
           check(at("atomic-answer-value").textContent === atomicAnswer, "Mobile tabs lost atomic state");
           noOverflow("restored atomic panel");

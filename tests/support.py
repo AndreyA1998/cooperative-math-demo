@@ -21,14 +21,15 @@ HAS_WEBKIT = sys.platform == "darwin" and shutil.which("clang") is not None
 
 def ensure_runtime():
     """Use an explicit source checkout or unpack the published runtime once."""
-    if importlib.util.find_spec("mathgen") is None:
+    packages = ("source_dataset", "template_dataset", "composite_dataset")
+    if any(importlib.util.find_spec(name) is None for name in packages):
         temporary = tempfile.TemporaryDirectory(prefix="math-demo-native-")
         atexit.register(temporary.cleanup)
         with zipfile.ZipFile(ROOT / "runtime.zip") as archive:
             archive.extractall(temporary.name)
-        sys.path.append(temporary.name)
-    # An explicitly supplied package (including scripts/check.py) owns both
-    # mathgen and math_demo. Only a private source checkout needs this fallback.
+        sys.path.insert(0, temporary.name)
+    # An explicit runtime (including scripts/check.py) owns the dataset packages
+    # and math_demo. A source checkout needs the current public bridge fallback.
     if importlib.util.find_spec("math_demo") is None:
         sys.path.insert(0, str(ROOT / "python"))
 

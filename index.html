@@ -3,211 +3,83 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Новые варианты математических задач и деревья связанных подзадач. Точные ответы, воспроизводимые сиды и работа прямо в браузере.">
-  <meta name="theme-color" content="#164534">
-  <title>Cooperative Math — задачи MATH</title>
+  <meta name="description" content="Математические шаблоны и связанные подзадачи с точными ответами. Работает в браузере.">
+  <meta name="theme-color" content="#f7f9f8">
+  <title>Cooperative Math</title>
   <link rel="stylesheet" href="./styles.css">
   <link rel="stylesheet" href="./composite.css">
   <script type="module" src="./main.js"></script>
 </head>
 <body>
-  <main class="workspace">
-    <header class="heading">
-      <span class="mark" aria-hidden="true">∑</span>
-      <div>
-        <p class="eyebrow">Cooperative Math</p>
-        <h1>Одна задача. Много вариантов.</h1>
-        <p>Меняйте параметры или собирайте дерево подзадач. Вычисления выполняются в вашем браузере.</p>
-      </div>
-    </header>
-    <div class="runtime-banner">
-      <span class="runtime-dot" aria-hidden="true"></span>
-      <p id="runtime-status" role="status">Подготавливаем вычисления…</p>
-      <button id="runtime-retry" type="button" hidden>Повторить загрузку</button>
-    </div>
-    <nav class="demo-nav" role="tablist" aria-label="Тип задачи">
-      <button id="atomic-tab" type="button" role="tab" aria-controls="atomic-panel" aria-selected="true" data-view="atomic">Одиночная задача</button>
-      <button id="composite-tab" type="button" role="tab" aria-controls="composite-panel" aria-selected="false" tabindex="-1" data-view="composite">Дерево задач</button>
-    </nav>
-    <section id="atomic-panel" class="tab-panel" role="tabpanel" aria-labelledby="atomic-tab" tabindex="0">
-      <div class="panel-heading"><h2>Варианты задач MATH</h2><p>Выберите раздел и номер — или доверьте выбор случаю.</p></div>
-
-
+<main class="workspace">
+  <header class="heading">
+    <a class="brand" href="#atomic"><span class="mark" aria-hidden="true">∑</span><h1>Cooperative Math</h1></a>
+    <div class="runtime-banner"><span class="runtime-dot" aria-hidden="true"></span><p id="runtime-status" role="status">Подготавливаем вычисления…</p><button id="runtime-retry" type="button" hidden>Повторить</button></div>
+  </header>
+  <nav class="demo-nav" role="tablist" aria-label="Тип задачи">
+    <button id="atomic-tab" type="button" role="tab" aria-controls="atomic-panel" aria-selected="true" data-view="atomic">Одна задача</button>
+    <button id="composite-tab" type="button" role="tab" aria-controls="composite-panel" aria-selected="false" tabindex="-1" data-view="composite">Дерево задач</button>
+  </nav>
+  <section id="atomic-panel" class="tab-panel" role="tabpanel" aria-labelledby="atomic-tab" tabindex="0">
     <form id="atomic-generator" class="card controls">
       <fieldset id="atomic-catalogue-controls" disabled>
-        <legend>Задача из каталога</legend>
+        <legend class="sr-only">Выбор задачи</legend>
         <div class="filters">
-          <label>Раздел
-            <select id="atomic-subject" required></select>
-          </label>
-          <label>Выборка
-            <select id="atomic-split" required>
-              <option value="train">train</option>
-              <option value="test" selected>test</option>
-            </select>
-          </label>
-          <label>Номер задачи
-            <select id="atomic-problem-id" required></select>
-          </label>
+          <label>Раздел<select id="atomic-subject" required></select></label>
+          <label>Выборка<select id="atomic-split" required><option value="train">train</option><option value="test" selected>test</option></select></label>
+          <label>Задача<select id="atomic-problem-id" required></select></label>
+          <button id="atomic-generate-random" class="random-button" type="button">↻ Случайная задача</button>
+        </div>
+        <div class="action-row">
+          <div class="generation-actions"><button class="primary" id="atomic-generate" type="submit">Заполнить числа</button><button id="atomic-reset" type="button" disabled>Сбросить</button></div>
+          <div class="seed-controls"><label class="checkbox-option"><input id="atomic-seed-mode" type="checkbox"> Задать сид</label><label id="atomic-seed-setting" class="seed-setting" hidden><span class="sr-only">Сид</span><input id="atomic-seed" class="seed-input" type="text" inputmode="numeric" pattern="[0-9]{1,20}" maxlength="20" placeholder="Например, 42" autocomplete="off" required disabled></label></div>
         </div>
         <p class="muted catalogue-count" id="atomic-catalogue-count" aria-live="polite">Загружаем каталог…</p>
-        <div class="seed-controls">
-          <label class="checkbox-option"><input id="atomic-seed-mode" type="checkbox"> Генерация по сиду</label>
-          <label id="atomic-seed-setting" class="seed-setting" hidden>Сид
-            <input id="atomic-seed" class="seed-input" type="text" inputmode="numeric"
-                   pattern="[0-9]{1,20}" maxlength="20" placeholder="Например, 42"
-                   autocomplete="off" required disabled>
-          </label>
-        </div>
-        <div class="generation-actions">
-          <button class="primary" id="atomic-generate" type="submit">Сгенерировать</button>
-          <button id="atomic-generate-random" type="button">Случайная задача</button>
-        </div>
       </fieldset>
     </form>
-
-    <p id="atomic-renderer-note" class="muted help" role="status" hidden></p>
     <p id="atomic-status" class="status" role="status" hidden></p>
-
-    <div class="results">
-      <article class="card problem-card" aria-labelledby="atomic-problem-title">
-        <header>
-          <h2 id="atomic-problem-title">Условие</h2>
-          <p class="metadata" id="atomic-problem-meta" hidden></p>
-        </header>
-        <p id="atomic-placeholder" class="muted">Здесь появится сгенерированная задача.</p>
-        <div id="atomic-problem-text" lang="en" class="problem-text" hidden></div>
-        <section class="answer" id="atomic-answer" aria-labelledby="atomic-answer-title" hidden>
-          <h3 id="atomic-answer-title">Ответ</h3>
-          <div class="answer-value" id="atomic-answer-value"></div>
-        </section>
-      </article>
-
-      <aside class="card details-card" aria-labelledby="atomic-params-title">
-        <h2 id="atomic-params-title">Параметры</h2>
-        <p id="atomic-params-placeholder" class="muted">Появятся после генерации.</p>
-        <dl id="atomic-params" class="parameters" hidden></dl>
-        <p id="atomic-version" class="muted version" hidden></p>
-      </aside>
-    </div>
-
-    </section>
-    <section id="composite-panel" class="tab-panel composite" role="tabpanel" aria-labelledby="composite-tab" tabindex="0" hidden>
-      <div class="panel-heading"><h2>Связанные подзадачи</h2><p>Сначала постройте схему. Затем получите вариант: ответы нижних задач становятся входами верхних.</p></div>
-
-
-    <div class="composite-controls">
-      <form id="composite-structure-form" class="card">
+    <article class="card problem-card" aria-labelledby="atomic-problem-title">
+      <header class="section-heading"><div><p class="eyebrow" id="atomic-mode">Шаблон</p><h2 id="atomic-problem-title">Задача</h2></div><span class="slot-hint"><i></i> Параметры</span></header>
+      <p id="atomic-placeholder" class="muted">Загружаем шаблон…</p>
+      <div id="atomic-params" class="parameter-chips" hidden></div>
+      <div id="atomic-problem-text" lang="en" class="problem-text" hidden></div>
+      <p id="atomic-renderer-note" class="muted help" role="status" hidden></p>
+      <section class="answer" id="atomic-answer" aria-labelledby="atomic-answer-title"><h3 id="atomic-answer-title">Ответ</h3><div class="answer-value" id="atomic-answer-value">—</div></section>
+      <details class="technical-details"><summary>Технические детали</summary><p class="metadata" id="atomic-problem-meta"></p><p id="atomic-version" class="muted version"></p><div id="atomic-template-notes" class="technical-notes" lang="en"></div><div class="copy-control"><button id="atomic-copy" type="button">Копировать условие</button><output id="atomic-copy-status"></output></div></details>
+    </article>
+  </section>
+  <section id="composite-panel" class="tab-panel composite" role="tabpanel" aria-labelledby="composite-tab" tabindex="0" hidden>
+    <div class="composite-controls card">
+      <form id="composite-structure-form">
         <fieldset id="composite-structure-controls">
-          <legend>1. Схема</legend>
-          <div class="structure-fields">
-            <label>Глубина
-              <input id="composite-depth" type="number" min="1" max="12" step="1" value="3" required>
-            </label>
-            <label>Ширина основания
-              <input id="composite-width" type="number" min="1" max="9007199254740991" step="1" value="4" aria-describedby="composite-width-help" required>
-            </label>
-            <label>Выборка
-              <select id="composite-split">
-                <option value="train">train</option>
-                <option value="test">test</option>
-              </select>
-            </label>
-          </div>
-          <p id="composite-width-help" class="muted help">Ширина — число подзадач в основании. Если запрос больше доступной ширины, схема будет уже: максимум 128 подзадач.</p>
-          <label class="checkbox-option reuse-option"><input id="composite-reuse" type="checkbox"> Разрешить повторять задачи</label>
-          <div class="seed-controls">
-            <label class="checkbox-option"><input id="composite-structure-seed-mode" type="checkbox"> Генерация по сиду</label>
-            <label id="composite-structure-seed-setting" class="seed-setting" hidden>Сид
-              <input id="composite-structure-seed" class="seed-input" type="text" inputmode="numeric"
-                     pattern="[0-9]{1,20}" maxlength="20" placeholder="Например, 42"
-                     autocomplete="off" required disabled>
-            </label>
-          </div>
-          <button id="composite-structure-random" class="primary" type="submit">Новая схема</button>
+          <legend class="sr-only">Схема дерева</legend>
+          <div class="structure-fields"><label>Глубина<input id="composite-depth" type="number" min="1" max="12" step="1" value="3" required></label><label>Ширина<input id="composite-width" type="number" min="1" max="9007199254740991" step="1" value="4" aria-describedby="composite-width-help" required></label><label>Выборка<select id="composite-split"><option value="train">train</option><option value="test">test</option></select></label><button id="composite-structure-random" type="submit">↻ Новая схема</button></div>
+          <div class="structure-options"><label class="checkbox-option"><input id="composite-reuse" type="checkbox"> Повторять задачи</label><div class="seed-controls"><label class="checkbox-option"><input id="composite-structure-seed-mode" type="checkbox"> Задать сид схемы</label><label id="composite-structure-seed-setting" class="seed-setting" hidden><span class="sr-only">Сид схемы</span><input id="composite-structure-seed" class="seed-input" type="text" inputmode="numeric" pattern="[0-9]{1,20}" maxlength="20" placeholder="Например, 42" autocomplete="off" required disabled></label></div></div>
+          <p id="composite-width-help" class="sr-only">Число задач в основании. Максимум 128.</p>
         </fieldset>
       </form>
-
-      <form id="composite-parameter-form" class="card">
-        <fieldset id="composite-parameter-controls" disabled>
-          <legend>2. Вариант задачи</legend>
-          <div class="seed-controls">
-            <label class="checkbox-option"><input id="composite-parameter-seed-mode" type="checkbox"> Генерация по сиду</label>
-            <label id="composite-parameter-seed-setting" class="seed-setting" hidden>Сид
-              <input id="composite-parameter-seed" class="seed-input" type="text" inputmode="numeric"
-                     pattern="[0-9]{1,20}" maxlength="20" placeholder="Например, 1"
-                     autocomplete="off" required disabled>
-            </label>
-          </div>
-          <div class="parameter-actions">
-            <button id="composite-parameter-random" class="primary" type="submit">Новый вариант</button>
-            <button id="composite-reset-parameters" type="button" disabled>Сбросить параметры</button>
-          </div>
-        </fieldset>
-        <p id="composite-parameter-hint" class="muted help">Этот шаг станет доступен после построения схемы.</p>
-        <p id="composite-instance-link" class="help" hidden><a href="#composite">Перейти к полному условию ↓</a></p>
+      <form id="composite-parameter-form">
+        <fieldset id="composite-parameter-controls" disabled><legend class="sr-only">Числа в схеме</legend><div class="action-row"><div class="parameter-actions"><button id="composite-parameter-random" class="primary" type="submit">Заполнить числа</button><button id="composite-reset-parameters" type="button" disabled>Сбросить</button></div><div class="seed-controls"><label class="checkbox-option"><input id="composite-parameter-seed-mode" type="checkbox"> Задать сид чисел</label><label id="composite-parameter-seed-setting" class="seed-setting" hidden><span class="sr-only">Сид чисел</span><input id="composite-parameter-seed" class="seed-input" type="text" inputmode="numeric" pattern="[0-9]{1,20}" maxlength="20" placeholder="Например, 1" autocomplete="off" required disabled></label></div></div></fieldset>
       </form>
     </div>
-
-    <p id="composite-status" class="status" role="status" hidden></p>
-    <p id="composite-width-notice" class="status warning" role="status" hidden></p>
-    <p id="composite-reuse-notice" class="status warning" role="status" hidden>Без повторений такую схему собрать нельзя. Разрешены повторения шаблонов.</p>
-
+    <p id="composite-status" class="status" role="status" hidden></p><p id="composite-width-notice" class="status warning" role="status" hidden></p><p id="composite-reuse-notice" class="status warning" role="status" hidden>Для этой схемы потребовались повторения задач.</p>
+    <div id="composite-parameter-hint" class="empty-canvas"><span class="empty-tree" aria-hidden="true">○<br>╱ ╲<br>○ &nbsp; ○</span><p>Постройте схему, затем заполните числа.</p></div>
     <div id="composite-schema-results" class="composite-results" hidden>
-      <section class="card" aria-labelledby="composite-tree-heading">
-        <header class="section-heading">
-          <div>
-            <h2 id="composite-tree-heading">Дерево подзадач</h2>
-            <p id="composite-schema-meta" class="metadata"></p>
-          </div>
-          <button id="composite-export-schema" type="button">Скачать JSON схемы</button>
-        </header>
-        <p id="composite-tree-help" class="muted help">Каждая стрелка передаёт один ответ во вход u совместного адаптера родителя. Адаптер согласованно формирует параметры задачи. Исходные ID указаны под локальными обозначениями.</p>
-        <div id="composite-tree-viewport" class="tree-viewport" tabindex="0" role="region"
-             aria-labelledby="composite-tree-heading" aria-describedby="composite-tree-help">
-          <svg id="composite-tree" role="img" aria-labelledby="composite-svg-title composite-svg-description"></svg>
-        </div>
+      <section class="card tree-card" aria-labelledby="composite-tree-heading">
+        <header class="section-heading"><div><p class="eyebrow" id="composite-mode">Шаблон</p><h2 id="composite-tree-heading">Дерево задач</h2></div><div id="composite-instance-result" class="root-result" hidden><span>Ответ</span><strong id="composite-root-answer"></strong></div><p id="composite-schema-meta" class="metadata"></p></header>
+        <p id="composite-tree-help" class="sr-only">Ответы передаются снизу вверх. Нажмите на задачу, чтобы перейти к её условию.</p>
+        <div id="composite-tree-viewport" class="tree-viewport" tabindex="0" role="region" aria-labelledby="composite-tree-heading" aria-describedby="composite-tree-help"><svg id="composite-tree" role="img" aria-labelledby="composite-svg-title composite-svg-description"></svg></div>
+        <div class="canvas-footer"><span><i class="legend-dot"></i> Параметры основания <i class="legend-dot internal"></i> Из ответов</span><span>↑ К итоговому ответу</span></div>
       </section>
-
-      <section class="card" aria-labelledby="composite-template-heading">
-        <header class="section-heading">
-          <h2 id="composite-template-heading">Условие схемы</h2>
-          <div class="copy-control">
-          <button id="composite-copy-template" type="button">Копировать условие схемы</button>
-          <output class="muted" id="composite-template-copy-status"></output>
-        </div>
-        </header>
-        <div class="parameter-legend" aria-label="Обозначения параметров">
-          <span><span class="legend-swatch slot-external">a</span> Внешние параметры основания</span>
-          <span><span class="legend-swatch slot-internal">u</span> Внутренние входы из ответов подзадач</span>
-        </div>
+      <section aria-labelledby="composite-template-heading" class="tasks-section">
+        <header class="section-heading"><h2 id="composite-template-heading">Подзадачи</h2><div class="copy-control"><button id="composite-copy-current" type="button">Копировать условие</button><output id="composite-current-copy-status" class="muted"></output></div></header>
         <p id="composite-presentation-note" class="muted help" hidden></p>
         <div id="composite-public-template" lang="en" class="problem-text composite-text"></div>
       </section>
-
-      <section id="composite-instance-result" class="card" aria-labelledby="composite-instance-heading" hidden>
-        <header class="section-heading">
-          <h2 id="composite-instance-heading">Полное условие</h2>
-          <div class="copy-control">
-          <button id="composite-copy-instance" type="button">Копировать полное условие</button>
-          <output class="muted" id="composite-instance-copy-status"></output>
-        </div>
-        </header>
-        <p id="composite-instance-presentation-note" class="muted help" hidden></p>
-        <div id="composite-public-instance" lang="en" class="problem-text composite-text"></div>
-        <details class="answer" id="composite-solution">
-          <summary>
-            <span class="closed-label">Показать ответ и ход вычислений</span>
-            <span class="open-label">Скрыть ответ и ход вычислений</span>
-          </summary>
-          <div class="answer-value" id="composite-root-answer"></div>
-          <ol id="composite-solution-trace" class="solution-trace"></ol>
-        </details>
-      </section>
+      <details class="technical-details schema-details"><summary>Технические детали</summary><div class="technical-actions"><button id="composite-export-schema" type="button">Скачать JSON схемы</button><div class="copy-control"><button id="composite-copy-template" type="button">Копировать шаблон</button><output id="composite-template-copy-status"></output></div><div class="copy-control"><button id="composite-copy-instance" type="button" disabled>Копировать вариант</button><output id="composite-instance-copy-status"></output></div></div><div id="composite-provenance"></div></details>
     </div>
-
-    </section>
-    <footer class="page-footer">Точные ответы · Повторяемая генерация · Без установки</footer>
-  </main>
+  </section>
+  <footer class="page-footer">MATH · Точные вычисления в браузере</footer>
+</main>
 </body>
 </html>
