@@ -76,6 +76,20 @@ export const MathPresentation = (() => {
     return ranges;
   }
 
+  function symbolicMath(text) {
+    if (typeof text !== "string" || !text) return false;
+    let braces = 0, fences = 0;
+    for (const token of text.match(/\\(?:[A-Za-z]+|.)|[{}$]/g) ?? []) {
+      if (["$", "\\(", "\\)", "\\[", "\\]", "\\begin", "\\end", "\\\\"].includes(token)) return false;
+      if (token === "{") braces++;
+      else if (token === "}") braces--;
+      else if (token === "\\left") fences++;
+      else if (token === "\\right") fences--;
+      if (braces < 0 || fences < 0) return false;
+    }
+    return braces === 0 && fences === 0;
+  }
+
   function standaloneMath(text) {
     let braces = 0;
     for (let at = 0; at < text.length; at++) {
@@ -93,9 +107,11 @@ export const MathPresentation = (() => {
     let slots = [];
     for (const segment of segments) {
       const start = text.length;
-      text += segment.text;
-      if (segment.kind === "parameter" && !(segment.filled && segment.text.length === 0)) {
-        slots.push({ ...segment, start, end: text.length });
+      const symbolic = segment.kind === "parameter" && !segment.filled && symbolicMath(segment.symbolic_math);
+      const content = symbolic ? segment.symbolic_math : segment.text;
+      text += content;
+      if (segment.kind === "parameter" && !(segment.filled && content.length === 0)) {
+        slots.push({ ...segment, text: content, symbolic, start, end: text.length });
       }
     }
     const ranges = mathRanges(text);
@@ -133,8 +149,10 @@ export const MathPresentation = (() => {
         source += text.slice(position, slot.start);
         // Commands and colors come from this renderer. No HTML extensions or trust
         // are enabled; only the certified presentation fragment receives emphasis.
-        const value = slot.filled ? slot.text : "\\text{" + escapeText(slot.text) + "}";
+        const value = slot.filled || slot.symbolic ? slot.text : "\\text{" + escapeText(slot.text) + "}";
         source += "{\\color{" + colors[slot.role] + "}\\boxed{" + value + "}}";
+        // A small visual gap keeps a boxed whole term distinct from an adjacent fraction.
+        if (/^\\(?:dfrac|tfrac|frac)\b/.test(text.slice(slot.end, range.contentEnd))) source += "\\,";
         position = slot.end;
       }
       source += text.slice(position, range.contentEnd);

@@ -225,7 +225,8 @@ function renderPresentation(presentation) {
 function resetParameters() {
   currentInstance = undefined;
   currentVariantRaw = undefined;
-  byId("download").hidden = true;
+  byId("download").hidden = !currentSchema;
+  byId("download").textContent = "Скачать шаблон";
   presentationRevision++;
   byId("mode").textContent = "Шаблон";
   byId("instance-result").hidden = true;
@@ -277,7 +278,8 @@ function showInstance(instance, presentation, raw) {
   currentInstance = instance;
   currentVariantRaw = raw;
   byId("download").hidden = false;
-  byId("mode").textContent = "Вариант";
+  byId("download").textContent = "Скачать задачу";
+  byId("mode").textContent = "Задача";
   byId("reset-parameters").disabled = false;
   byId("instance-result").hidden = false;
   byId("root-answer").textContent = instance.answer;
@@ -336,13 +338,22 @@ async function copyText(button, text) {
   } catch { copied = false; }
   button.parentElement.querySelector("output").textContent = copied ? "Скопировано" : "Выделите текст и скопируйте вручную.";
 }
-byId("copy-current").addEventListener("click", (event) => { void copyText(event.currentTarget, currentInstance?.problem ?? currentSchema.data.problem_template); });
+function currentTaskText() {
+  return currentInstance?.problem ?? currentSchema?.data.problem_template ?? null;
+}
+byId("copy-current").addEventListener("click", (event) => {
+  const text = currentTaskText();
+  if (text != null) void copyText(event.currentTarget, text);
+});
 byId("download").addEventListener("click", () => {
-  if (!currentInstance) return;
-  const url = URL.createObjectURL(new Blob([currentInstance.problem], { type: "text/plain;charset=utf-8" }));
+  const text = currentTaskText();
+  if (text == null) return;
+  const url = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
   const link = document.createElement("a");
   link.href = url;
-  link.download = "math-task-" + currentSchema.data.seed + "-" + currentInstance.parameter_seed + ".txt";
+  link.download = currentInstance
+    ? "math-task-" + currentSchema.data.seed + "-" + currentInstance.parameter_seed + ".txt"
+    : "math-template-" + currentSchema.data.seed + ".txt";
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 });

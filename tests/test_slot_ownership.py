@@ -39,13 +39,25 @@ class SlotOwnershipTests(unittest.TestCase):
                 self.assertIn('{xyz}', literal)
                 self.assertTrue(literal.endswith('.'))
 
-    def test_unresolved_computed_statements_are_plain_text_for_every_template(self):
+    def test_every_template_has_a_full_bare_condition_and_owned_substitutions(self):
         for source, template in registry().items():
-            for parameters in (None, template.original):
-                result = display.atomic_presentation(source, parameters)
-                if result['scope'] == 'computed-statement':
-                    with self.subTest(source=source, filled=parameters is not None):
-                        self.assertFalse(slots(result), 'an unresolved statement is not a parameter span')
+            with self.subTest(source=source):
+                bare = display.atomic_presentation(source)
+                filled = display.atomic_presentation(source, template.original)
+                self.assertEqual(bare['scope'], 'native-fields')
+                self.assertEqual(filled['scope'], 'native-fields')
+                self.assertTrue(slots(bare), 'a parameter list alone is not a problem template')
+                literal = ''.join(part['text'] for part in bare['segments'] if part['kind'] == 'text')
+                self.assertRegex(literal, r'[A-Za-z]{2,}', 'the question must be visible before filling')
+                self.assertNotIn('statement(', literal)
+                self.assertEqual(''.join(part['text'] for part in filled['segments']),
+                                 template.render(template.original))
+                self.assertEqual([part['key'] for part in slots(bare)],
+                                 [part['key'] for part in slots(filled)])
+                for part in slots(bare):
+                    self.assertFalse(part['filled'])
+                    self.assertTrue(part['parameters'], 'a placeholder must own declared inputs')
+                    self.assertLessEqual(set(part['parameters']), set(template.parameters))
 
     def test_filled_parameter_fragments_do_not_own_tex_delimiters_or_cross_groups(self):
         for source in registry():

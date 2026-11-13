@@ -160,5 +160,27 @@ class RendererBrowserTests(unittest.TestCase):
         ''', page="__component_test__.html")
 
 
+    def test_explicit_symbolic_math_renders_a_real_bare_recipe_with_boundary_guards(self):
+        self.render_case(r'''
+          const {MathPresentation} = await import("./math-renderer.js");
+          const target = document.createElement("div"); document.body.append(target);
+          const field = {kind: "parameter", text: "factorial sum(count)", name: "factorial sum", key: "sum", role: "external", filled: false,
+            symbolic_math: "\\sum_{k=1}^{\\text{count}} k!"};
+          const wrap = part => [{kind: "text", text: "Compute $"}, part, {kind: "text", text: "$."}];
+          check(await MathPresentation.render(target, wrap(field)), "Symbolic recipe did not typeset");
+          check(target.querySelector(".katex-html .mop"), "Bare sum is a text alias instead of mathematical notation");
+          check(!target.textContent.includes("factorial sum("), "An opaque alias replaced the bare mathematical recipe");
+          check(target.querySelector("annotation").textContent.includes("\\sum"), "Symbolic TeX was escaped as a label");
+          await MathPresentation.render(target, wrap({...field, text: "\\frac{1}{2}", symbolic_math: undefined}));
+          check(!target.querySelector(".mfrac"), "An ordinary label was promoted to executable math syntax");
+          await MathPresentation.render(target, wrap({...field, text: "count", symbolic_math: "$ hidden $"}));
+          check(!target.textContent.includes("hidden") && target.querySelectorAll(".math-fragment").length === 1,
+                "Symbolic metadata crossed a math delimiter boundary");
+          await MathPresentation.render(target, wrap({...field, text: "7", filled: true}));
+          check(!target.querySelector("annotation").textContent.includes("\\sum"), "Filled value was replaced by a stale symbolic recipe");
+          return "OK: real symbolic math with explicit metadata and safe boundaries";
+        ''')
+
+
 if __name__ == "__main__":
     unittest.main()

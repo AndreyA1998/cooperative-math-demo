@@ -79,7 +79,11 @@ def atomic_response(path, query):
     if path == "/api/describe":
         return describe(problem_id)
     if path == "/api/template":
-        return dict(describe(problem_id), presentation=atomic_presentation(problem_id))
+        shown = atomic_presentation(problem_id)
+        problem_template = ''.join(part.get('symbolic_math', part['text']) for part in shown['segments'])
+        if shown['notes']:
+            problem_template += '\n\n' + '\n'.join(shown['notes'])
+        return dict(describe(problem_id), presentation=shown, problem_template=problem_template)
 
     seed = _seed(fields["seed"][0]) if "seed" in fields else randbits(64)
     variant = generate(problem_id, seed)

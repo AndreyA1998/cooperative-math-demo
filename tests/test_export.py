@@ -31,9 +31,10 @@ class PublicExportTests(unittest.TestCase):
             'source_dataset/LICENSE.MATH', 'source_dataset/source.lock.json',
             'template_dataset/__init__.py', 'template_dataset/core.py',
             'template_dataset/registry.py', 'template_dataset/families/__init__.py',
-            'template_dataset/families/algebra.py',
-            'template_dataset/families/extensions/__init__.py',
-            'template_dataset/families/extensions/example.py',
+            'template_dataset/families/algebra/__init__.py',
+            'template_dataset/families/algebra/equations_and_expressions.py',
+            'template_dataset/families/word_problems/__init__.py',
+            'template_dataset/families/word_problems/rates_proportions_and_costs.py',
             'composite_dataset/__init__.py', 'composite_dataset/__main__.py',
             'composite_dataset/schema.py', 'composite_dataset/profiles.py',
             'composite_dataset/smart_adapters.py', 'composite_dataset/rendering.py',
@@ -57,7 +58,8 @@ class PublicExportTests(unittest.TestCase):
             path = source / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text('# ' + name + '\n')
-        for name in ('__init__.py', 'api.py', 'presentation.py', 'secret.txt'):
+        for name in ('__init__.py', 'api.py', 'presentation.py',
+                     'expression_patterns.py', 'source_bindings.py', 'secret.txt', 'private_notes.py'):
             path = public / 'python/math_demo' / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text('# public ' + name + '\n')
@@ -67,7 +69,8 @@ class PublicExportTests(unittest.TestCase):
                         '-c', 'user.email=runtime-test@example.invalid',
                         'commit', '-qm', 'Fixture'], check=True, capture_output=True)
         expected = set(names) | {'math_demo/' + name for name in
-                                ('__init__.py', 'api.py', 'presentation.py')}
+                                ('__init__.py', 'api.py', 'presentation.py',
+                                 'expression_patterns.py', 'source_bindings.py')}
         return source, public, expected
 
     def test_reproducible_allowlist_and_hashes(self):
@@ -87,6 +90,9 @@ class PublicExportTests(unittest.TestCase):
             self.assertEqual(first['source_commit'], commit)
             with zipfile.ZipFile(public / 'runtime.zip') as archive:
                 self.assertEqual(set(archive.namelist()), expected)
+                self.assertIn('math_demo/expression_patterns.py', archive.namelist())
+                self.assertIn('math_demo/source_bindings.py', archive.namelist())
+                self.assertNotIn('math_demo/private_notes.py', archive.namelist())
                 self.assertEqual(set(first['files']), expected)
                 self.assertEqual(len(archive.namelist()), len(expected))
                 for name in expected:

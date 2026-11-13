@@ -26,7 +26,8 @@ def export_runtime(source, public=ROOT):
         'rendering.py', 'runtime.py', 'diagnostics.py', 'topology.py', 'patterns.py',
         'operators.py', 'serialization.py', 'data/profiles.json.gz'))
     entries = {path.relative_to(source).as_posix(): path.read_bytes() for path in paths}
-    for name in ('__init__.py', 'api.py', 'presentation.py'):
+    for name in ('__init__.py', 'api.py', 'presentation.py',
+                 'expression_patterns.py', 'source_bindings.py'):
         entries['math_demo/' + name] = (public / 'python/math_demo' / name).read_bytes()
     commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=source, text=True).strip()
     archive_path = public / 'runtime.zip'

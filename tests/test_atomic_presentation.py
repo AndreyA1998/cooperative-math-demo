@@ -79,12 +79,16 @@ class AtomicPresentationTests(unittest.TestCase):
         self.assertEqual(''.join(part['text'] for part in result['segments']),
                          r'For positive real $x,y,z$, find the minimum of $\frac{3 x^3+2 y^3+\frac{243}{2} z^3}{xyz}$.')
 
-    def test_computed_statements_never_claim_static_prose_as_parameter(self):
+    def test_structural_reciprocal_expression_keeps_prose_literal(self):
         source = 'algebra/train/53'
         for params in (None, generate(source, 17)['parameters']):
             result = self.present(source, params)
-            self.assertEqual(result['scope'], 'computed-statement')
-            self.assertTrue(all(part['kind'] == 'text' for part in result['segments']))
+            self.assertEqual(result['scope'], 'native-fields')
+            literal = ''.join(part['text'] for part in result['segments'] if part['kind'] == 'text')
+            self.assertIn('If ', literal)
+            self.assertIn('find', literal)
+            self.assertTrue(all('If ' not in part['text'] and 'find' not in part['text']
+                                for part in result['segments'] if part['kind'] == 'parameter'))
 
     def test_string_parameter_chips_use_literal_content_without_json_quotes(self):
         for source, params, name, expected in (
@@ -95,6 +99,77 @@ class AtomicPresentationTests(unittest.TestCase):
                 result = self.present(source, params)
                 value = next(item['text'] for item in result['inputs'] if item['name'] == name)
                 self.assertEqual(value, expected)
+
+    def test_semantic_source_bindings_keep_named_native_slots(self):
+        # Derived source spans, wrapped equation bindings and both prose span
+        # formats use different renderer identity hooks after the package move.
+        for source in ('algebra/train/52', 'algebra/train/27',
+                       'algebra/train/41', 'algebra/train/4'):
+            with self.subTest(source=source):
+                item = generate(source, 17)
+                result = self.present(source, item['parameters'])
+                self.assertEqual(result['scope'], 'native-fields')
+                self.assertEqual(''.join(part['text'] for part in result['segments']), item['problem'])
+                names = {name for part in result['segments'] if part['kind'] == 'parameter'
+                         for name in part['parameters']}
+                self.assertEqual(names, set(item['parameters']))
+
+    def test_constructed_alphabet_keeps_length_and_class_owners_separate(self):
+        for source in ('counting_and_probability/train/187', 'counting_and_probability/train/251'):
+            for params in ({'length': 8, 'vowels': 4, 'consonants': 1},
+                           {'length': 2, 'vowels': 1, 'consonants': 8}):
+                with self.subTest(source=source, params=params):
+                    bare = self.present(source)
+                    filled = self.present(source, params)
+                    self.assertEqual(bare['scope'], 'native-fields')
+                    owned = [p for p in filled['segments'] if p['kind'] == 'parameter']
+                    letters = ', '.join(sorted('AEIOU'[:params['vowels']] + 'BCDFGHJK'[:params['consonants']]))
+                    self.assertEqual([(set(p['parameters']), p['text']) for p in owned],
+                                     [({'length'}, str(params['length'])), ({'vowels', 'consonants'}, letters)])
+                    self.assertEqual([p['key'] for p in owned],
+                                     [p['key'] for p in bare['segments'] if p['kind'] == 'parameter'])
+                    self.assertEqual(''.join(p['text'] for p in filled['segments']), get_template(source).render(params))
+                    static = ''.join(p['text'] for p in bare['segments'] if p['kind'] == 'text')
+                    self.assertIn('How many ', static)
+                    self.assertIn(' contain at least one ', static)
+                    self.assertIn('Letters can be reused.', static)
+
+    def test_factorial_sum_full_condition_exists_before_count_is_filled(self):
+        source = 'counting_and_probability/train/77'
+        bare = self.present(source)
+        self.assertEqual(bare['scope'], 'native-fields')
+        self.assertIn('units digit', ''.join(p['text'] for p in bare['segments']).lower())
+        for count in (4, 274, 500):
+            params = {'count': count}
+            result = self.present(source, params)
+            self.assertEqual(''.join(p['text'] for p in result['segments']), get_template(source).render(params))
+            self.assertTrue(any(p['parameters'] == ['count'] for p in result['segments'] if p['kind'] == 'parameter'))
+
+    def test_composite_uses_independent_decimal_owners_without_service_labels(self):
+        source = 'prealgebra/train/436'
+        node = {'source_id': source, 'label': 'R4', 'children': []}
+        bare, notes, scope = display._question(node, None)
+        self.assertEqual(scope, 'native-fields')
+        self.assertNotIn('R4.', ''.join(part['text'] for part in bare))
+        self.assertNotIn('fragment', ''.join(part['text'] for part in bare) + ' '.join(notes))
+        filled, _, _ = display._question(node, {'n1': 4, 'n2': 19})
+        owned = [part for part in filled if part['kind'] == 'parameter']
+        self.assertEqual([(part['parameters'], part['text']) for part in owned],
+                         [(['n1'], '0.4'), (['n2'], '1.9')])
+        self.assertTrue(all(part['key'].startswith('R4.') for part in owned))
+        self.assertEqual(''.join(part['text'] for part in filled), get_template(source).render({'n1': 4, 'n2': 19}))
+
+    def test_conditional_distance_units_keep_both_complete_bare_questions(self):
+        source = 'number_theory/train/523'
+        bare = self.present(source)
+        literal = ''.join(part['text'] for part in bare['segments'] if part['kind'] == 'text')
+        self.assertIn('Each course is 26 miles', literal)
+        self.assertIn('A course measures 26 large units', literal)
+        for unit in (1760, 2000):
+            params = {'yards': 385, 'unit': unit, 'trips': 10}
+            filled = self.present(source, params)
+            self.assertEqual(''.join(part['text'] for part in filled['segments']), get_template(source).render(params))
+            self.assertTrue(all('course' not in part['text'] for part in filled['segments'] if part['kind'] == 'parameter'))
 
     def test_all_supported_domains_reconstruct_ordinary_generation(self):
         for source in registry():

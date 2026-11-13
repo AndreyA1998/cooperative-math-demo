@@ -15,6 +15,8 @@ from types import SimpleNamespace, FunctionType, CodeType
 from fractions import Fraction
 
 from template_dataset.registry import get_template
+from .expression_patterns import source_expression_parts
+from .source_bindings import bind_source
 from composite_dataset.patterns import (
     _Field, _SourceField, _Fragment, _get_pattern, _json, _conditions, _case_pattern,
     _source_parts, _proxy_parts, _Slot, _MARKER,
@@ -45,13 +47,27 @@ def _number(value):
     return sign + r'\frac{' + str(abs(fraction.numerator)) + '}{' + str(fraction.denominator) + '}'
 
 
+def _linear_math(terms, offset=0):
+    """Render an exact linear expression without zero terms or unit factors."""
+    pieces = []
+    for coefficient, symbol in (*terms, (offset, '')):
+        coefficient = Fraction(str(coefficient))
+        if not coefficient:
+            continue
+        sign = '-' if coefficient < 0 else ('+' if pieces else '')
+        magnitude = abs(coefficient)
+        factor = '' if symbol and magnitude == 1 else _number(magnitude)
+        pieces.append(sign + factor + symbol)
+    return ''.join(pieces) or '0'
+
+
 def _operator_math(operator, label):
-    ref = r'\mathrm{R}_{' + label[1:] + '}'
+    ref = r'\text{выход №' + label[1:] + '}'
     kind = operator['kind']
     if kind == 'identity':
         return ref, []
     if kind == 'affine':
-        return r'\left(' + _number(operator['scale']) + r'\right)' + ref + r'+\left(' + _number(operator['offset']) + r'\right)', []
+        return _linear_math(((operator['scale'], ref),), operator['offset']), []
     classifier = operator['classifier']
     zero, one = operator['target_domain']['values']
     notes = []
@@ -61,14 +77,16 @@ def _operator_math(operator, label):
         condition = ref + '<' + _number(classifier['cut'])
     else:
         spec = classifier['spec']
-        sub = label[1:]
-        n, d = 'N_{' + sub + '}', 'D_{' + sub + '}'
-        numerator = r'\left(' + str(spec['numerator']) + r'\right)' + n
-        numerator += r'+\left(' + str(spec['denominator']) + r'\right)' + d
-        quotient = r'\left\lfloor\frac{' + numerator + '}{' + str(spec['divisor']) + r'}\right\rfloor'
+        n = r'\text{числитель}\left(' + ref + r'\right)'
+        d = r'\text{знаменатель}\left(' + ref + r'\right)'
+        numerator = _linear_math(((spec['numerator'], n), (spec['denominator'], d)))
+        quotient = numerator if spec['divisor'] == 1 else r'\left\lfloor\frac{' + numerator + '}{' + str(spec['divisor']) + r'}\right\rfloor'
+        if spec['divisor'] != 1:
+            notes.append(r'$\lfloor x\rfloor$ — округление вниз до ближайшего целого.')
         condition = r'\operatorname{mod}\left(' + quotient + ',' + str(spec['modulus']) + r'\right)<' + str(spec['threshold'])
         first, second = zero, one
-        notes.append('$' + ref + '=' + r'\frac{' + n + '}{' + d + '}$ in lowest terms, with $' + d + '>0$.')
+        notes.append('Числитель и знаменатель берутся у сокращённой дроби с положительным знаменателем.')
+        notes.append('mod(a, m) — неотрицательный остаток от деления a на m: от 0 до m−1.')
     return (r'\begin{cases}' + _number(first) + r' & ' + condition + r'\\' + _number(second) + r' & \text{otherwise}\end{cases}', notes)
 
 
@@ -86,7 +104,7 @@ def _adapter_math(node, by_id):
     for binding in node['bindings']:
         expression, definitions = _operator_math(binding['operator'], by_id[binding['source_node']]['label'])
         rules.append(_tex_text(signals[binding['input_index']]) + ' = ' + expression)
-        notes.extend(definitions)
+        notes.extend(note for note in definitions if note not in notes)
     for axis, ports in enumerate(node['adapter']['groups']):
         bit = signals[ports[0]]
         if len(ports) > 1:
@@ -98,7 +116,7 @@ def _adapter_math(node, by_id):
             lhs = r'\left(' + lhs + r'\right)'
         choices = []
         for index in (0, 1 << axis):
-            values = [_tex_text(_json(rows[index][name])) for name in parameters]
+            values = [_tex_text(_display_value(rows[index][name])) for name in parameters]
             choices.append(values[0] if len(values) == 1 else r'\left(' + ', '.join(values) + r'\right)')
         rules.append(lhs + r'=\begin{cases}' + choices[0] + ' & ' + _tex_text(bit) + r'=0\\' + choices[1] + r' & \text{otherwise}\end{cases}')
     return rules, notes
@@ -124,58 +142,18 @@ def _structural_tex(text):
 
 
 def _question(node, params):
-    pattern = _get_pattern(node['source_id'], _json(node['profile']['rows']))
-    # Certified diffs can split TeX syntax across substitutions. Display those
-    # as complete native cases; inserting boxes or placeholders would change
-    # grouping or remove delimiters. The saved pattern and model text stay intact.
-    if pattern.scope != 'certified-cases' and any(
-            _structural_tex(text)
-            for part in pattern.parts if isinstance(part, _Fragment)
-            for _, text in part.alternatives):
-        rows = node['profile']['rows']
-        template = get_template(node['source_id'])
-        pattern = _case_pattern(rows, tuple(template.render(row) for row in rows),
-                                node['profile']['parameter_names'])
+    """Use the ordinary native field owners for both tree and atomic cards."""
+    result = atomic_presentation(node['source_id'], params)
     role = 'external' if not node['children'] else 'internal'
     prefix = node['label']
-    notes, segments = [], []
-    if pattern.scope == 'certified-cases':
-        fragment = pattern.parts[0]
-        if params is None:
-            text = '\n\n'.join('If ' + _conditions(fragment.names, values) + ': ' + statement
-                                 for values, statement in fragment.alternatives)
-            notes.append('Use the statement matching the input values.')
-        else:
-            text = fragment.fill(params)
-        segments = [{'kind': 'text', 'text': text}]
-    else:
-        fragments = {}
-        for part in pattern.parts:
-            if isinstance(part, str):
-                segments.append({'kind': 'text', 'text': part})
-                continue
-            if isinstance(part, (_Field, _SourceField)):
-                name, dependencies = part.label(), [part.name]
-                if isinstance(part, _Field):
-                    notes.extend(rule for rule in part.legend() if rule not in notes)
-            elif isinstance(part, _Fragment):
-                if part not in fragments:
-                    fragments[part] = 'fragment ' + str(len(fragments) + 1)
-                    if params is None:
-                        choices = '; '.join(_conditions(part.names, values) + ' → ' + _json(text)
-                                            for values, text in part.alternatives)
-                        notes.append('Insert ' + fragments[part] + ' using the matching inputs: ' + choices + '.')
-                name, dependencies = fragments[part], list(part.names)
-            else:
-                raise TypeError('Unknown certified pattern part')
-            segments.append({'kind': 'parameter', 'text': part.fill(params) if params is not None else (prefix + '.' + name if role == 'external' else name),
-                             'name': name, 'key': prefix + '.' + name, 'role': role,
-                             'filled': params is not None, 'parameters': dependencies})
-    if params is not None:
-        native = get_template(node['source_id']).render(params)
-        if ''.join(part['text'] for part in segments) != native:
-            raise ValueError('Display annotations do not reconstruct the native question')
-    return segments, notes, pattern.scope
+    segments = []
+    for original in result['segments']:
+        part = dict(original)
+        if part['kind'] == 'parameter':
+            part['key'] = prefix + '.' + part['key']
+            part['role'] = role
+        segments.append(part)
+    return segments, result['notes'], result['scope']
 
 
 def presentation(schema, seed=None):
@@ -223,9 +201,9 @@ def _presentation_validated(schema, instance=None):
                       'adapter': '' if external else _render_inputs(node, by_id),
                       'adapter_math': rules, 'scope': scope})
     return {'version': 'composite-presentation-2', 'mode': 'template' if instance is None else 'instance',
-            'introduction': ['Solve the subproblems in order. R1, R2, … denote their exact answers.',
+            'introduction': ['Solve the numbered subproblems in order. Use each answer in the rules referring to that subproblem.',
                              'If a subproblem requests digits without a base subscript, read that digit sequence as a decimal integer in the conversion rules.'],
-            'nodes': nodes, 'conclusion': 'Return only ' + by_id[schema['root_id']]['label'] + ', the answer to the final subproblem.'}
+            'nodes': nodes, 'conclusion': 'Return only the answer to subproblem ' + str(by_id[schema['root_id']]['number']) + '.'}
 
 
 @dataclass(frozen=True)
@@ -527,7 +505,7 @@ def _derived_source_parts(template):
     """Reuse explicit native source spans, including their derived expressions."""
     render = template.render
     name = getattr(render, '__module__', ''), getattr(render, '__qualname__', '')
-    if name == ('template_dataset.families.algebra_v2', '_derived.<locals>.render'):
+    if name == ('template_dataset.families.algebra.symbolic_forms', '_derived.<locals>.render'):
         context = getclosurevars(render).nonlocals
         problem, parts, offset = context['problem'], [], 0
         descriptions = None
@@ -545,7 +523,7 @@ def _derived_source_parts(template):
             parts.extend((problem[offset:start], field))
             offset = end
         return (*parts, problem[offset:])
-    if name == ('template_dataset.families.extensions.algebra_equations', '_build_bound_equation.<locals>.render'):
+    if name == ('template_dataset.families.algebra.real_roots', '_build_bound_equation.<locals>.render'):
         context = getclosurevars(render).nonlocals
         proxy = SimpleNamespace(render=context['bindings'].render, parameters=template.parameters, original=template.original)
         parts = _source_parts(proxy)
@@ -555,17 +533,51 @@ def _derived_source_parts(template):
     return ()
 
 
+@dataclass(frozen=True)
+class _GroupedField:
+    parts: tuple
+    names: tuple
+    description: str
+
+    def fill(self, params):
+        return ''.join(part if isinstance(part, str) else part.fill(params) for part in self.parts)
+
+    def label(self):
+        return self.description
+
+
+def _decimal_parts(parts, template):
+    """Group the two native digit fields of a declared scaled numeric input."""
+    result, index = [], 0
+    while index < len(parts):
+        part = parts[index]
+        names = (part.name,) if isinstance(part, (_Field, _SourceField)) else getattr(part, 'names', ())
+        if len(names) == 1 and index + 2 < len(parts) and parts[index + 1] == '.':
+            following = parts[index + 2]
+            other = (following.name,) if isinstance(following, (_Field, _SourceField)) else getattr(following, 'names', ())
+            unit = template.parameters[names[0]].get('unit')
+            if names == other and unit and Fraction(unit).denominator > 1:
+                result.append(_GroupedField(tuple(parts[index:index + 3]), names,
+                                            names[0] + '/' + str(Fraction(unit).denominator)))
+                index += 3
+                continue
+        result.append(part)
+        index += 1
+    return tuple(result)
+
+
 @lru_cache(maxsize=None)
 def _atomic_parts(source_id):
     template = get_template(source_id)
     rewrites = _has_text_rewrite(template.render)
-    builders = [_source_parts, _derived_source_parts]
+    builders = [_source_parts, _derived_source_parts, bind_source]
     if not rewrites:
         builders.extend((_proxy_parts, _expression_parts, lambda t: _expression_parts(t, lifted=True)))
+    builders.append(source_expression_parts)
     for build in builders:
         try:
-            parts = build(template)
-            if parts and ''.join(p if isinstance(p, str) else p.fill(template.original) for p in parts) == template.render(template.original):
+            parts = _decimal_parts(build(template), template)
+            if parts and not any(_structural_tex(p.fill(template.original)) for p in parts if not isinstance(p, str) and not getattr(p, 'conditional_literal', False)) and ''.join(p if isinstance(p, str) else p.fill(template.original) for p in parts) == template.render(template.original):
                 return parts
         except (ArithmeticError, AttributeError, IndexError, KeyError, TypeError, ValueError):
             pass
@@ -594,12 +606,19 @@ def atomic_presentation(source_id, params=None):
                 segments.append({'kind': 'text', 'text': part})
                 continue
             name = part.label()
+            if getattr(part, 'conditional_literal', False):
+                segments.append({'kind': 'text', 'text': name if params is None else part.fill(params),
+                                 'parameters': list(part.names), 'control': part.control})
+                continue
             names = [part.name] if isinstance(part, (_Field, _SourceField)) else list(part.names)
             if isinstance(part, _Field):
                 notes.extend(note for note in part.legend() if note not in notes)
             segments.append({'kind': 'parameter', 'name': name, 'key': name,
                              'text': name if params is None else part.fill(params),
                              'role': 'external', 'filled': params is not None, 'parameters': names})
+            symbolic_math = getattr(part, 'symbolic_math', None)
+            if params is None and symbolic_math and not _structural_tex(symbolic_math):
+                segments[-1]['symbolic_math'] = symbolic_math
     else:
         names = list(template.parameters)
         label = 'statement(' + ', '.join(names) + ')'

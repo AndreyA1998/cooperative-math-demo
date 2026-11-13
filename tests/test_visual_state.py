@@ -60,7 +60,7 @@ class VisualStateTests(unittest.TestCase):
                   $("atomic-tab").click();
                   check($("atomic-answer-value").textContent === answer, "Tabs lost atomic state");
                   $("atomic-reset").click();
-                  check($("atomic-download").hidden, "Atomic reset kept the TXT download");
+                  check(!$("atomic-download").hidden && $("atomic-download").textContent === "Скачать шаблон", "Atomic reset failed to restore template download");
                   await settled();
                   check($("atomic-answer-value").textContent === "—" && $("atomic-problem-text").textContent === bare, "Atomic reset did not restore the pattern");
                   $("composite-tab").click();

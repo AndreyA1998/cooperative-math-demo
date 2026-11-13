@@ -1,0 +1,215 @@
+{
+  "format": "math-demo-verification-1",
+  "checked_at": "2026-11-13T14:35:21.979394+00:00",
+  "status": "passed",
+  "provenance": {
+    "ui_commit": "769466436c8e3326f4f8a7fef5bfa1d4deb52beb",
+    "source_commit": "8b8e3e464732a17563235a21cf4336c9fa5bd9da",
+    "runtime_archive_sha256": "bd118d45430ced73b56d2d3df82d3e5f6e7644ef4f78f8145256913d71b7258a",
+    "runtime_archive_bytes": 2320611
+  },
+  "frontend_sha256": {
+    "index.html": "8fbf8b4cac8e4ce4e735ff1fe9c25f26f95cf3290216cc6be99d83dc383cef3b",
+    "styles.css": "f26c0a06a4d639e48579f3cbffe82759d69c639f01355b1741c17f1ec52a7048",
+    "composite.css": "157b006b6195808c3dbaf441702e31241b381e311b500027f686208d415551b8",
+    "app.js": "7d352905c3fc004cbd620261999dde1e43db898b1d1293970eb9a0f8ad274b25",
+    "composite.js": "d7b1fd05aa95e85a0c97f67bf68efb57e85c933b4e4cd205fcc740b22d2e1660",
+    "math-renderer.js": "930559a2d90cf0003a8ea1ab91a65cda21839596a1451bd28715624ffb9f6bad",
+    "main.js": "3edf3444a58c7763930b7eb82d228d33631900e4ab1652f61b8539280f6fafd2",
+    "transport.js": "59879be094b9aac815a80b98b3de58c553a3fc4c6201a680727679e9d6dfc643"
+  },
+  "server": {
+    "platform": "Linux",
+    "python": "3.14.10",
+    "environment": "Project-owned final .venv on Python3.14.10; former3.12 environment retained for rollback. Full66-test baseline used .venv-py314-check; targeted tree checks use final .venv.",
+    "browser": "Chromium Headless Shell 158.0.8127.18",
+    "playwright": "1.65.1",
+    "python_suite": {
+      "command": ".venv-py314-check/bin/python -B scripts/check.py",
+      "tests": 66,
+      "passed": 66,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
+      "exit_code": 0,
+      "elapsed_seconds": null,
+      "evidence": "Full checker exit 0; exact discovery count and absence of active skip decorators verified separately. SSH omitted the unittest stderr summary, so no elapsed time is claimed.",
+      "commit": "4e90819e05fe570ba8ff3fed1cf35d49f4969ce6"
+    },
+    "javascript_suite": {
+      "command": "Playwright bundled node --test tests/*.test.mjs",
+      "node": "26.13.1",
+      "tests": 9,
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0,
+      "elapsed_ms": 169.318459,
+      "commit": "4e90819e05fe570ba8ff3fed1cf35d49f4969ce6"
+    },
+    "static_build": {
+      "commit": "769466436c8e3326f4f8a7fef5bfa1d4deb52beb",
+      "command": ".venv/bin/python -B scripts/build_site.py",
+      "exit_code": 0
+    },
+    "targeted_runs": [
+      {
+        "commit": "769466436c8e3326f4f8a7fef5bfa1d4deb52beb",
+        "command": "PYTHONPATH=tests .venv/bin/python -B -m unittest -v test_browser test_visual_state test_layout test_renderer",
+        "tests": 11,
+        "passed": 11,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 0,
+        "elapsed_seconds": 122.784,
+        "coverage": [
+          "All4286 WASM/native exact output digest; exact uint64/raw schema state.",
+          "Atomic and composite top TXT downloads: exact UTF-8 problem bytes, no additions; hidden in bare/reset.",
+          "All external inputs under leaves: names, exact filled values, incoming arrows and reset.",
+          "Large128-leaf root focus, wrapped input text and preservation of manual pan.",
+          "Atomic filter/tab memory, composite values, renderer/retry behavior and390px no overflow."
+        ]
+      }
+    ]
+  },
+  "coverage": [
+    "Exact WASM/native raw output digest for all 4286 atomic IDs.",
+    "Exact uint64 seeds and large schema integers internally; exact UTF-8 canonical problem downloads.",
+    "Bare patterns, separate filling/reset, selection/filter/tab state and visible answers.",
+    "Composite node answers, incoming values and joint target parameters update in the existing tree and cards.",
+    "Source labels in vertices, required conversion rules visible, no technical expanders or permanent ready banner.",
+    "Fault-injected API recovery and runtime startup/retry.",
+    "Real formulas and controls at a 390px viewport without page overflow.",
+    "Independent annotation-boundary audit: 4286 IDs x 3 seeds, plus semantic ownership regressions."
+  ],
+  "independent_review": {
+    "status": "No open actionable findings.",
+    "reviewers": [
+      "dataset_demo_bridge",
+      "dataset_structure_review"
+    ],
+    "methods": [
+      "Code inspection with independent failure reproductions; regression cases are included in the current server suite.",
+      "Six semantic ownership cases, exhaustive boundary audit and two browser annotation guards.",
+      "Static review of Linux browser adapter: awaited JS assertions preserved; evaluation failures and missing browser fail the suite."
+    ],
+    "resolved_findings": [
+      {
+        "issue": "A failed atomic template selection left missing state and stale card actions; Fill could not recover.",
+        "resolution": "The pending card clears stale values, disables Reset and Copy, and Fill retries the selected template. Prior task values remain cached.",
+        "regression": "test_failed_template_selection_can_fill_current_task_without_reselection"
+      },
+      {
+        "issue": "Composite reset retained filled cards when its initial optional template presentation had failed.",
+        "resolution": "Reset restores the canonical bare template when annotated template presentation is unavailable.",
+        "regression": "test_reset_after_template_presentation_failure_removes_all_filled_answers"
+      },
+      {
+        "issue": "Structural atomic fallbacks exposed an internal statement(...) expression without a visible explanation.",
+        "resolution": "The bare view shows a concise explanation and named input chips; filling shows the native mathematical condition.",
+        "regression": "test_structural_fallback_explains_blank_condition_without_pseudoformula"
+      },
+      {
+        "issue": "Random task selection also filled values, bypassing the separate selection and generation steps.",
+        "resolution": "Random selection now displays the bare template; filling is a separate action."
+      },
+      {
+        "issue": "A whole-condition annotation colored static prose across TeX boundaries.",
+        "resolution": "Native coefficient ownership for the AM-GM case; structural fallbacks are plain text and the renderer rejects cross-boundary highlighting."
+      },
+      {
+        "issue": "An empty filled sign fragment produced an empty blue box.",
+        "resolution": "Empty filled spans are omitted; negative signs and bare named sign placeholders retain their annotations."
+      }
+    ]
+  },
+  "personal_visual_review": {
+    "environment": "isolated macOS WebKit window, before server-only testing preference",
+    "atomic_cases": 12,
+    "views": [
+      "bare",
+      "filled",
+      "reset"
+    ],
+    "all_inspected_by_root": true,
+    "cases": [
+      "intermediate_algebra/test/200",
+      "prealgebra/test/11",
+      "algebra/train/1316",
+      "counting_and_probability/train/33",
+      "counting_and_probability/train/253",
+      "algebra/train/26",
+      "algebra/train/374",
+      "geometry/train/735",
+      "prealgebra/train/47",
+      "intermediate_algebra/train/1292",
+      "algebra/train/52",
+      "algebra/train/681"
+    ],
+    "checks": [
+      "literal prose remains uncolored",
+      "fractions without JSON quotes",
+      "empty boxes absent",
+      "large integers preserved",
+      "words and list entries have correct ownership",
+      "no persistent ready banner or technical expanders"
+    ],
+    "limitation": "331 structural patterns intentionally render the filled native condition without guessed inline ownership; parameter chips remain visible.",
+    "server": {
+      "environment": "Linux Chromium158.0.8127.18, screenshots personally inspected by root",
+      "small_answer": "35",
+      "empty_slots": 0,
+      "mobile_overflow": false,
+      "page_errors": [],
+      "large": {
+        "nodes": 239,
+        "answers": 239,
+        "cards": 239,
+        "answer": "3292/289"
+      },
+      "width_notice": "Requested10000, available30; demo cap128 bottom tasks.",
+      "finding": "The large asymmetric root was outside the initial viewport; this prompted the21611ac centering fix.",
+      "correction_check": {
+        "root_visible": true,
+        "center_error_px": 0,
+        "scroll_left": 14774,
+        "scroll_top": 0,
+        "large_bare_and_filled_screenshots_reviewed_by": [
+          "visual_redesign",
+          "root"
+        ],
+        "small_internal_cards_reviewed": [
+          5,
+          6
+        ]
+      },
+      "inputs_and_txt": {
+        "commit": "769466436c8e3326f4f8a7fef5bfa1d4deb52beb",
+        "screenshots": 6,
+        "reviewed_by": "visual_redesign",
+        "leaf_panels": 4,
+        "external_inputs": 12,
+        "filled_inputs": 12,
+        "small_answer": "35",
+        "checks": [
+          "Blue input panels and arrows appear below leaves.",
+          "Top download hidden for bare patterns, shown for filled tasks.",
+          "Atomic and composite condition/answer remain visible."
+        ]
+      }
+    }
+  },
+  "download_format": {
+    "format": "UTF-8 .txt",
+    "content": "Exact canonical filled problem only; no answer, trace, metadata or JSON.",
+    "visibility": "Top controls of atomic/composite task; hidden before fill and after reset.",
+    "verification": "Atomic/composite exact byte, MIME, filename, top-placement and visibility checks passed in the current11-test server browser suite."
+  },
+  "atomic_pattern_coverage_report": "atomic-patterns.json",
+  "limits": {
+    "normal_browser_case_timeout_seconds": 240,
+    "exhaustive_4286_id_case_timeout_seconds": 900,
+    "structural_patterns": "331 patterns show the exact filled native condition without guessed inline ownership; named parameter chips remain visible.",
+    "network": "Browser runtime and KaTeX use pinned CDN URLs; the static origin receives no API POSTs.",
+    "environment": "Automated checks run on the server. No local environment or package cache was created. Browser assets and temporary files stay inside the server project .cache."
+  }
+}

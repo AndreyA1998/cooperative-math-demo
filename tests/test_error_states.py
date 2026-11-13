@@ -76,7 +76,7 @@ class FrontendErrorStateTests(unittest.TestCase):
         ''')
         self.assertIn('OK:', output)
 
-    def test_structural_fallback_explains_blank_condition_without_pseudoformula(self):
+    def test_structural_pattern_is_visible_before_fill_and_after_reset(self):
         output = self.run_case(r'''
           await until(idleAtomic, "initial template");
           change("atomic-subject", "algebra");
@@ -87,17 +87,23 @@ class FrontendErrorStateTests(unittest.TestCase):
           await until(idleAtomic, "structural pattern");
           const {request} = await import("./transport.js");
           const template = await request("GET", "/api/template", "id=algebra%2Ftrain%2F53");
-          check(template.data.presentation.scope === "computed-statement", "Review fixture must exercise a structural fallback");
+          check(template.data.presentation.scope !== "computed-statement", "Review fixture still hides its structural condition");
+          const settled = async () => until(() => !$("atomic-renderer-note").hidden ||
+            [...$("atomic-problem-text").querySelectorAll(".math-fragment")].every(node => node.hasAttribute("data-rendered")), "math layout", {timeout: 20000});
+          await settled();
           const bareText = $("atomic-problem-text").textContent;
           check(!bareText.includes("statement("), "Internal statement(...) pseudoformula leaked into the main condition");
-          check(bareText.includes("после заполнения параметров"), "Structural fallback has no visible explanation");
-          check($("atomic-params").querySelectorAll(".input-chip").length > 0, "Structural fallback hid its named inputs");
+          check(bareText.includes("If") && !bareText.includes("после заполнения параметров"), "Structural pattern is not visible before filling");
+          check($("atomic-problem-text").querySelector(".parameter-slot, [data-parameters]"), "Structural condition has no symbolic slots");
+          check($("atomic-params").querySelectorAll(".input-chip").length > 0, "Structural pattern hid its named inputs");
           $("atomic-generate").click();
           await until(idleAtomic, "filled structural task");
+          await settled();
           check($("atomic-problem-text").textContent !== bareText && $("atomic-answer-value").textContent !== "—", "Structural fallback did not fill its real condition and answer");
           $("atomic-reset").click();
-          check($("atomic-problem-text").textContent === bareText, "Structural fallback reset changed its explanation");
-          return "OK: structural fallback stays explicit before and after fill";
+          await settled();
+          check($("atomic-problem-text").textContent === bareText, "Reset changed the complete structural pattern");
+          return "OK: complete structural pattern stays visible before fill and after reset";
         ''')
         self.assertIn('OK:', output)
 

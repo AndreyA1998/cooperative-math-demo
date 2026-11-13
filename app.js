@@ -60,11 +60,12 @@ function renderTask(state) {
   const text = byId("problem-text");
   byId("placeholder").hidden = true;
   text.hidden = false;
-  byId("mode").textContent = variant ? "Вариант" : "Шаблон";
+  byId("mode").textContent = variant ? "Задача" : "Шаблон";
   byId("problem-title").textContent = "Задача № " + taskNumber(activeId);
   byId("answer-value").textContent = variant?.answer ?? "—";
   byId("reset").disabled = !variant;
-  byId("download").hidden = !variant;
+  byId("download").hidden = false;
+  byId("download").textContent = variant ? "Скачать задачу" : "Скачать шаблон";
   byId("copy-status").textContent = "";
   byId("copy").disabled = false;
   const chips = (presentation?.inputs ?? []).map((input) => {
@@ -85,9 +86,8 @@ function renderTask(state) {
   setSeedMode(state.seedMode ?? false);
   seedInput.value = state.seed ?? "";
   byId("renderer-note").hidden = true;
-  const segments = !variant && presentation?.scope === "computed-statement"
-    ? [{ kind: "text", text: "Условие появится после заполнения параметров." }]
-    : presentation?.segments ?? [{ kind: "text", text: content.problem ?? content.problem_template ?? content.template ?? "" }];
+  const segments = presentation?.segments
+    ?? [{ kind: "text", text: content.problem ?? content.problem_template ?? content.template ?? "" }];
   void MathPresentation.render(text, segments).then((rendered) => {
     if (token !== revision) return;
     byId("renderer-note").textContent = "Часть формул показана в исходной записи LaTeX.";
@@ -207,20 +207,29 @@ byId("reset").addEventListener("click", () => {
   state.variant = null;
   renderTask(state);
 });
+function currentTaskText() {
+  const state = tasks.get(activeId);
+  if (!state) return null;
+  if (state.variant) return state.variant.problem;
+  if (state.template.problem_template != null) return state.template.problem_template;
+  const presentation = state.template.presentation;
+  return [presentation.segments.map((part) => part.symbolic_math ?? part.text).join(""),
+    ...(presentation.notes ?? [])].filter(Boolean).join("\n\n");
+}
 byId("download").addEventListener("click", () => {
-  const variant = tasks.get(activeId)?.variant;
-  if (!variant) return;
-  const url = URL.createObjectURL(new Blob([variant.problem], { type: "text/plain;charset=utf-8" }));
+  const text = currentTaskText();
+  if (text == null) return;
+  const variant = tasks.get(activeId).variant;
+  const url = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
   const link = document.createElement("a");
   link.href = url;
-  link.download = "math-task-" + variant.seed + ".txt";
+  link.download = variant ? "math-task-" + variant.seed + ".txt" : "math-template-" + taskNumber(activeId) + ".txt";
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 });
 byId("copy").addEventListener("click", async () => {
-  const state = tasks.get(activeId);
-  if (!state) return;
-  const text = state.variant?.problem ?? state.template.problem_template ?? state.template.presentation.segments.map(({ text }) => text).join("");
+  const text = currentTaskText();
+  if (text == null) return;
   try { await navigator.clipboard.writeText(text); byId("copy-status").textContent = "Скопировано"; }
   catch { byId("copy-status").textContent = "Не удалось скопировать. Выделите условие вручную."; }
 });

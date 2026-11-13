@@ -102,7 +102,8 @@ class BrowserRuntimeTests(unittest.TestCase):
 
     def test_atomic_controls_replay_exact_seed_and_tabs_preserve_state(self):
         expected = json.loads(native("GET", "/api/generate", "id=algebra%2Ftrain%2F1316&seed=0"))["problem"]
-        self.run_case("const expectedAtomicText = " + json.dumps(expected) + r''';
+        bare_expected = json.loads(native("GET", "/api/template", "id=prealgebra%2Ftest%2F11"))["problem_template"]
+        self.run_case("const expectedAtomicText = " + json.dumps(expected) + "; const expectedAtomicTemplate = " + json.dumps(bare_expected) + r''';
           await until(() => idleAtomic() && !$("atomic-problem-text").hidden, "shared atomic link");
           check($("atomic-seed-mode").checked && !$("atomic-seed-setting").hidden, "Share link lost seed mode");
           check($("atomic-seed").value === "0", "Share link lost exact seed");
@@ -111,7 +112,8 @@ class BrowserRuntimeTests(unittest.TestCase):
                 "Large native parameter lost decimal digits");
           check(!$("atomic-answer").hidden && $("atomic-answer").tagName !== "DETAILS",
                 "Atomic answer is not immediately visible");
-          let exported, filename;
+          let exported, filename, copied;
+          Object.defineProperty(navigator, "clipboard", {configurable: true, value: {writeText: async text => { copied = text; }}});
           const objectURL = URL.createObjectURL;
           URL.createObjectURL = blob => { exported = blob; return objectURL(blob); };
           const anchorClick = HTMLAnchorElement.prototype.click;
@@ -121,6 +123,8 @@ class BrowserRuntimeTests(unittest.TestCase):
           download.click();
           check(exported.type === "text/plain;charset=utf-8" && filename.endsWith(".txt"), "Atomic download is not UTF-8 TXT");
           check(await exported.text() === expectedAtomicText, "Atomic TXT changed the canonical problem or included metadata");
+          $("atomic-copy").click(); await until(() => copied !== undefined, "copy filled atomic task");
+          check(copied === await exported.text(), "Atomic filled copy and download differ");
           check([...new Uint8Array(await exported.arrayBuffer())].join() === [...new TextEncoder().encode(expectedAtomicText)].join(), "Atomic TXT bytes differ from exact UTF-8 condition");
           const previous = $("atomic-problem-text").textContent;
           $("composite-tab").click();
@@ -135,7 +139,11 @@ class BrowserRuntimeTests(unittest.TestCase):
           await until(idleAtomic, "split pattern");
           change("atomic-problem-id", "prealgebra/test/11");
           await until(idleAtomic, "selected pattern");
-          check($("atomic-download").hidden, "Bare atomic pattern offers a download");
+          check(!$("atomic-download").hidden && $("atomic-download").textContent === "Скачать шаблон", "Bare atomic task has no template download");
+          $("atomic-download").click();
+          check(await exported.text() === expectedAtomicTemplate, "Atomic template TXT is not the complete symbolic condition");
+          copied = undefined; $("atomic-copy").click(); await until(() => copied !== undefined, "copy atomic template");
+          check(copied === await exported.text(), "Atomic bare copy and download differ");
           if (!$("atomic-seed-mode").checked) $("atomic-seed-mode").click();
           const options = [...$("atomic-problem-id").options];
           check(options.every((option, index) => option.value.startsWith("prealgebra/test/")
@@ -157,7 +165,7 @@ class BrowserRuntimeTests(unittest.TestCase):
           check($("atomic-problem-id").value === options[0].value, "Random task ignored active filters");
           check(!$("atomic-seed-mode").checked && $("atomic-seed-setting").hidden, "Random task kept replay mode");
           check($("atomic-answer-value").textContent === "—" && !$("atomic-params").querySelector(".slot-filled"), "Random selection filled numbers before the separate action");
-          check($("atomic-download").hidden, "Random bare atomic task offers a download");
+          check(!$("atomic-download").hidden && $("atomic-download").textContent === "Скачать шаблон", "Random bare atomic task lost template download");
           return "OK: atomic controls, exact seed, visible answer, TXT download and persistent tabs";
         ''', suffix="?id=algebra%2Ftrain%2F1316&seed=0#atomic")
 
@@ -223,9 +231,10 @@ class BrowserRuntimeTests(unittest.TestCase):
           $("composite-copy-current").click();
           await until(() => copied !== undefined, "copy model template");
           check(copied === expected.modelTemplate, "Copy changed the model-facing schema text");
-          check($("composite-download").hidden, "Bare schema offers a download");
+          check(!$("composite-download").hidden && $("composite-download").textContent === "Скачать шаблон", "Bare schema has no template download");
           $("composite-download").click();
-          check(exported === undefined, "Bare schema downloaded a file");
+          check(exported.type === "text/plain;charset=utf-8" && filename.endsWith(".txt"), "Composite template download is not TXT");
+          check(await exported.text() === expected.modelTemplate && copied === await exported.text(), "Composite bare copy/download changed the full canonical pattern");
           await until(() => !$("composite-presentation-note").hidden
             || [...template.querySelectorAll(".math-fragment")].every(node => node.hasAttribute("data-rendered")),
             "template typesetting", {timeout: 20000});
@@ -247,6 +256,7 @@ class BrowserRuntimeTests(unittest.TestCase):
           download.click();
           check(exported.type === "text/plain;charset=utf-8" && filename.endsWith(".txt"), "Composite download is not UTF-8 TXT");
           check(await exported.text() === expected.modelInstance, "Composite TXT changed the canonical problem or included answer/trace/JSON");
+          check(copied === await exported.text(), "Composite filled copy and download differ");
           check([...new Uint8Array(await exported.arrayBuffer())].join() === [...new TextEncoder().encode(expected.modelInstance)].join(), "Composite TXT bytes differ from exact UTF-8 condition");
           check(!reset.disabled, "Reset unavailable after generation");
           $("atomic-tab").click();
@@ -255,7 +265,9 @@ class BrowserRuntimeTests(unittest.TestCase):
           check($("composite-root-answer").getBoundingClientRect().height > 0, "Answer is not visible");
           reset.click();
           check($("composite-instance-result").hidden, "Reset kept a stale variant");
-          check($("composite-download").hidden, "Reset kept a ready-task download");
+          check(!$("composite-download").hidden && $("composite-download").textContent === "Скачать шаблон", "Reset failed to restore template download");
+          $("composite-download").click();
+          check(await exported.text() === expected.modelTemplate, "Reset download did not restore the symbolic template");
           externalInputs(false);
           check(!$("composite-root-answer").textContent && !template.querySelector(".subproblem-answer, .slot-filled"), "Reset retained answer or values");
           await until(() => [...template.querySelectorAll(".math-fragment")].every(node => node.hasAttribute("data-rendered")) || !$("composite-presentation-note").hidden, "reset typesetting", {timeout: 20000});

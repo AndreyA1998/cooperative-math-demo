@@ -11,7 +11,7 @@ function selectView(view, { updateURL = false, focus = false } = {}) {
     document.getElementById(tab.getAttribute("aria-controls")).hidden = !selected;
     if (selected && focus) tab.focus({ preventScroll: true });
   }
-  document.title = (view === "composite" ? "Дерево задач" : "Варианты задач") + " — Cooperative Math";
+  document.title = (view === "composite" ? "Дерево задач" : "Задача") + " — Cooperative Math";
   if (updateURL) {
     const url = new URL(window.location.href);
     url.hash = view;
