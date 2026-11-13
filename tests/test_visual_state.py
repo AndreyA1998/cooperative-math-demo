@@ -37,7 +37,7 @@ class VisualStateTests(unittest.TestCase):
                   await until(idleAtomic, "restored split");
                   check($("atomic-problem-id").value === originalId, "Filter switch lost the selected task");
                   check($("atomic-answer-value").textContent === answer && $("atomic-seed").value === "18446744073709551615", "Filter switch lost answer or exact seed");
-                  $("composite-tab").click();
+                  $("composite-tab").click(); await until(idleComposite, "composite activation");
                   $("composite-structure-seed-mode").click();
                   $("composite-structure-seed").value = "42";
                   $("composite-depth").value = "3";
@@ -63,7 +63,7 @@ class VisualStateTests(unittest.TestCase):
                   check(!$("atomic-download").hidden && $("atomic-download").textContent === "Скачать шаблон", "Atomic reset failed to restore template download");
                   await settled();
                   check($("atomic-answer-value").textContent === "—" && $("atomic-problem-text").textContent === bare, "Atomic reset did not restore the pattern");
-                  $("composite-tab").click();
+                  $("composite-tab").click(); await until(idleComposite, "composite activation");
                   $("composite-reset-parameters").click();
                   await settled();
                   check($("composite-tree").innerHTML === bareTree, "Reset changed the tree structure");
@@ -78,7 +78,7 @@ class VisualStateTests(unittest.TestCase):
             with static_origin() as server:
                 result = run_browser(runner, server.url + "?id=prealgebra/test/11", r'''
                   await until(idleAtomic, "initial runtime");
-                  $("composite-tab").click();
+                  $("composite-tab").click(); await until(idleComposite, "composite activation");
                   $("composite-structure-seed-mode").click();
                   $("composite-structure-seed").value = "42";
                   $("composite-depth").value = "12";

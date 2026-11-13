@@ -136,7 +136,7 @@ class RendererBrowserTests(unittest.TestCase):
           window.Worker = FixtureWorker;
           await import("./main.js");
           await until(idleAtomic, "controlled catalogue");
-          $("composite-tab").click();
+          $("composite-tab").click(); await until(idleComposite, "composite activation");
           const reuse = $("composite-reuse");
           const notice = $("composite-reuse-notice");
           const build = async width => {

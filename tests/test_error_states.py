@@ -64,7 +64,7 @@ class FrontendErrorStateTests(unittest.TestCase):
     def test_reset_after_template_presentation_failure_removes_all_filled_answers(self):
         output = self.run_case(r'''
           await until(idleAtomic, "initial template");
-          $("composite-tab").click();
+          $("composite-tab").click(); await until(idleComposite, "composite activation");
           $("composite-structure-seed-mode").click();
           $("composite-structure-seed").value = "42";
           failNextPath = "/api/composite/presentation";

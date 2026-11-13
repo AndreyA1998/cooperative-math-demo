@@ -56,6 +56,7 @@ class TreeFlowTests(unittest.TestCase):
             with static_origin() as server:
                 output = run_browser(runner, server.url + "#composite", "const expected = " + json.dumps(expected) + r''';
                   await until(idleAtomic, "runtime ready");
+                  await until(idleComposite, "initial composite schema");
                   $("composite-structure-seed-mode").click();
                   $("composite-structure-seed").value = expected.seed;
                   $("composite-width").value = "8";

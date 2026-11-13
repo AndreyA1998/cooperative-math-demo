@@ -98,7 +98,7 @@ class MobileLayoutTests(unittest.TestCase):
           noOverflow("filled long atomic formula");
           const atomicAnswer = at("atomic-answer-value").textContent;
 
-          at("composite-tab").click();
+          at("composite-tab").click(); await waitFor(compositeIdle, "composite activation");
           check(mobile.location.hash === "#composite" && !at("composite-panel").hidden,
                 "Mobile tab does not activate the composite panel");
           inside("composite-depth");

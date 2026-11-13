@@ -40,19 +40,20 @@ class BrowserRuntimeTests(unittest.TestCase):
             self.assertFalse(any(method == "POST" or "/api/" in path for method, path in server.requests),
                              "The browser tried to use an HTTP generator backend")
 
-    def test_default_page_is_empty_and_seeds_are_opt_in(self):
+    def test_first_activation_selects_bare_templates_and_seeds_are_opt_in(self):
         self.run_case(r'''
           await until(idleAtomic, "catalogue ready");
-          check($("atomic-problem-card").hidden && $("atomic-problem-id").value === "", "Default page selected a task");
-          check($("atomic-generate").disabled, "Unselected task can be filled");
-          check(!new URL(location.href).searchParams.has("id") && !new URL(location.href).searchParams.has("seed"), "Old selection remained in the startup URL");
+          check(!$("atomic-problem-card").hidden && $("atomic-problem-id").value, "Default page did not select a template");
+          check(!$("atomic-generate").disabled, "Selected template cannot be filled");
+          check(!new URL(location.href).searchParams.has("seed"), "Old seed remained in the startup URL");
+          check($("composite-schema-results").hidden, "Hidden composite view built a tree before activation");
           for (const prefix of ["atomic", "composite-structure", "composite-parameter"]) {
             check(!$(prefix + "-seed-mode").checked && $(prefix + "-seed-setting").hidden, "Seed mode enabled by default: " + prefix);
           }
-          $("composite-tab").click();
-          check($("composite-schema-results").hidden, "Default page generated a composite tree");
+          $("composite-tab").click(); await until(idleComposite, "first composite activation");
+          check(!$("composite-schema-results").hidden && $("composite-root-answer").textContent === "—", "First composite activation did not show a bare schema");
           $("atomic-tab").click();
-          check($("atomic-problem-card").hidden, "Switching tabs generated a task");
+          check(!$("atomic-problem-card").hidden, "Switching tabs discarded the initial task");
           $("atomic-generate-random").click();
           await until(idleAtomic, "explicit random selection");
           check(!$("atomic-problem-card").hidden && $("atomic-problem-id").value, "Explicit random selection did not load a task");
@@ -61,7 +62,7 @@ class BrowserRuntimeTests(unittest.TestCase):
           const text = $("atomic-problem-text").textContent;
           $("composite-tab").click(); $("atomic-tab").click();
           check($("atomic-problem-text").textContent === text, "Tab switch discarded selected template");
-          return "OK: empty initial state, explicit selection, seeds opt-in";
+          return "OK: first activation, explicit selection, seeds opt-in";
         ''', suffix="?id=counting_and_probability/train/523&seed=42")
 
     def test_actual_wasm_matches_native_and_preserves_raw_large_schema_integers(self):
@@ -120,8 +121,8 @@ class BrowserRuntimeTests(unittest.TestCase):
         expected = json.loads(native("GET", "/api/generate", "id=algebra%2Ftrain%2F1316&seed=0"))["problem"]
         bare_expected = json.loads(native("GET", "/api/template", "id=prealgebra%2Ftest%2F11"))["problem_template"]
         self.run_case("const expectedAtomicText = " + json.dumps(expected) + "; const expectedAtomicTemplate = " + json.dumps(bare_expected) + r''';
-          await until(idleAtomic, "empty initial page");
-          check($("atomic-problem-card").hidden && !$("atomic-seed-mode").checked, "Old URL restored a task or seed");
+          await until(idleAtomic, "initial bare template");
+          check(!$("atomic-problem-card").hidden && !$("atomic-seed-mode").checked && $("atomic-answer-value").textContent === "—", "Old URL restored a filled task or seed");
           await selectAtomic("algebra/train/1316");
           $("atomic-seed-mode").click(); $("atomic-seed").value = "0";
           $("atomic-generate").click(); await until(idleAtomic, "explicit seed generation");
@@ -147,7 +148,7 @@ class BrowserRuntimeTests(unittest.TestCase):
           check(copied === await exported.text(), "Atomic filled copy and download differ");
           check([...new Uint8Array(await exported.arrayBuffer())].join() === [...new TextEncoder().encode(expectedAtomicText)].join(), "Atomic TXT bytes differ from exact UTF-8 condition");
           const previous = $("atomic-problem-text").textContent;
-          $("composite-tab").click();
+          $("composite-tab").click(); await until(idleComposite, "composite activation");
           check($("atomic-panel").hidden && !$("composite-panel").hidden, "Composite tab did not activate");
           check(location.hash === "#composite", "Composite tab has no addressable state");
           $("atomic-tab").click();
@@ -201,6 +202,7 @@ class BrowserRuntimeTests(unittest.TestCase):
                     "external": [{"node_id": node["node_id"], "inputs": node["inputs"]} for node in variant["presentation"]["nodes"] if node["kind"] == "bottom"]}
         self.run_case("const expected = " + json.dumps(expected) + r''';
           await until(idleAtomic, "runtime ready");
+          await until(idleComposite, "initial composite schema");
           check(!$("composite-panel").hidden && $("atomic-panel").hidden, "Direct composite tab link failed");
           let copied, exported, filename;
           Object.defineProperty(navigator, "clipboard", {configurable: true,
@@ -280,7 +282,7 @@ class BrowserRuntimeTests(unittest.TestCase):
           check([...new Uint8Array(await exported.arrayBuffer())].join() === [...new TextEncoder().encode(expected.modelInstance)].join(), "Composite TXT bytes differ from exact UTF-8 condition");
           check(!reset.disabled, "Reset unavailable after generation");
           $("atomic-tab").click();
-          $("composite-tab").click();
+          $("composite-tab").click(); await until(idleComposite, "composite activation");
           check(!$("composite-instance-result").hidden, "Tab switch discarded a composite variant");
           check($("composite-root-answer").getBoundingClientRect().height > 0, "Answer is not visible");
           reset.click();

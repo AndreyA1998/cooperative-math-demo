@@ -1,6 +1,6 @@
 import { request } from "./transport.js";
 import { MathPresentation } from "./math-renderer.js";
-import { readViewState, saveViewState, readCatalogueCache, saveCatalogueCache } from "./view-state.js";
+import { readViewState, saveViewState, readCatalogueCache, saveCatalogueCache, claimInitialSelection, isViewStateResetting } from "./view-state.js";
 
 const byId = (id) => document.getElementById("atomic-" + id);
 const catalogueControls = byId("catalogue-controls");
@@ -19,6 +19,16 @@ let activeId;
 let initialising = false;
 let revision = 0;
 let restoring = false;
+let activated = false;
+let ready = false;
+function selectInitialTask() {
+  if (ready && activated && !activeId && claimInitialSelection("atomic")) void selectRandomTask();
+}
+window.addEventListener("math-view-change", (event) => {
+  if (event.detail !== "atomic") return;
+  activated = true;
+  selectInitialTask();
+});
 function persistTask() {
   const state = tasks.get(activeId);
   if (!state || restoring) return;
@@ -62,6 +72,7 @@ function updateURL(state) {
   window.history.replaceState(null, "", url);
 }
 function renderTask(state) {
+  if (isViewStateResetting()) return;
   const token = ++revision;
   byId("problem-card").hidden = false;
   const variant = state.variant;
@@ -107,6 +118,7 @@ function renderTask(state) {
   persistTask();
 }
 async function selectTask() {
+  if (isViewStateResetting()) return;
   remember();
   activeId = idSelect.value;
   if (!activeId) return;
@@ -133,11 +145,12 @@ async function selectTask() {
   showStatus("Загружаем шаблон…");
   try {
     const template = await getJSON("template", { id });
+    if (isViewStateResetting()) return;
     state = { template, variant: null, seed: "", seedMode: false };
     tasks.set(id, state);
     if (id === activeId && revision === token) { renderTask(state); showStatus(""); }
   } catch (error) {
-    if (id === activeId) {
+    if (id === activeId && !isViewStateResetting()) {
       byId("placeholder").textContent = "Нажмите «Заполнить числа», чтобы повторить загрузку шаблона.";
       showStatus(error.message || "Не удалось загрузить шаблон.", true);
     }
@@ -151,7 +164,7 @@ async function changeFilter() {
   await selectTask();
 }
 async function generateVariant(seed) {
-  if (!activeId || catalogueControls.disabled) return;
+  if (!activeId || catalogueControls.disabled || isViewStateResetting()) return;
   if (!tasks.has(activeId)) {
     await selectTask();
     if (!tasks.has(activeId)) return;
@@ -168,12 +181,13 @@ async function generateVariant(seed) {
   showStatus("Вычисляем…");
   try {
     const variant = await getJSON("generate", fields);
+    if (isViewStateResetting()) return;
     const state = tasks.get(id);
     state.variant = variant;
     state.seed = variant.seed;
     if (activeId === id) renderTask(state);
     showStatus("");
-  } catch (error) { showStatus(error.message || "Не удалось заполнить числа.", true); }
+  } catch (error) { if (!isViewStateResetting()) showStatus(error.message || "Не удалось заполнить числа.", true); }
   finally { catalogueControls.disabled = false; }
 }
 async function init() {
@@ -183,6 +197,7 @@ async function init() {
     const cache = await readCatalogueCache();
     catalogue = cache.problems ?? (await getJSON("catalogue")).problems;
     if (!cache.problems) await saveCatalogueCache(cache.version, catalogue);
+    if (isViewStateResetting()) return;
     const subjects = [...new Set(catalogue.map(({ subject }) => subject))];
     subjectSelect.replaceChildren(...subjects.map((subject) => new Option(subjectNames[subject] ?? subject, subject)));
     subjectSelect.value = subjects.includes("algebra") ? "algebra" : subjects[0];
@@ -206,6 +221,7 @@ async function init() {
     showStatus("");
     catalogueControls.disabled = true;
     const saved = await readViewState("atomic");
+    if (isViewStateResetting()) return;
     catalogueControls.disabled = false;
     const entry = saved && catalogue.find(item => item.id === saved.id);
     if (entry) {
@@ -213,6 +229,7 @@ async function init() {
       try {
         subjectSelect.value = entry.subject; splitSelect.value = entry.split;
         filterCatalogue(entry.id); await selectTask();
+        if (isViewStateResetting()) return;
         const state = tasks.get(activeId);
         if (state) {
           state.seedMode = saved.seedMode === true; state.seed = String(saved.seed ?? "");
@@ -224,7 +241,9 @@ async function init() {
         }
       } finally { restoring = false; }
     }
-  } catch { showStatus("Не удалось загрузить каталог. Повторите загрузку выше.", true); }
+    ready = true;
+    selectInitialTask();
+  } catch { if (!isViewStateResetting()) showStatus("Не удалось загрузить каталог. Повторите загрузку выше.", true); }
   finally { initialising = false; }
 }
 seedInput.addEventListener("input", remember);
@@ -233,7 +252,8 @@ subjectSelect.addEventListener("change", () => { void changeFilter(); });
 splitSelect.addEventListener("change", () => { void changeFilter(); });
 idSelect.addEventListener("change", () => { void selectTask(); });
 byId("generator").addEventListener("submit", (event) => { event.preventDefault(); void generateVariant(seedMode.checked ? seedInput.value : undefined); });
-byId("generate-random").addEventListener("click", async () => {
+async function selectRandomTask() {
+  if (isViewStateResetting()) return;
   remember();
   idSelect.querySelector('option[value=""]')?.remove();
   idSelect.selectedIndex = Math.floor(Math.random() * idSelect.options.length);
@@ -243,7 +263,8 @@ byId("generate-random").addEventListener("click", async () => {
   state.variant = null;
   state.seedMode = false;
   renderTask(state);
-});
+}
+byId("generate-random").addEventListener("click", () => { void selectRandomTask(); });
 byId("reset").addEventListener("click", () => {
   remember();
   const state = tasks.get(activeId);

@@ -265,7 +265,7 @@ class CompletePatternBrowserTests(unittest.TestCase):
                     $("atomic-reset").click(); await settled();
                     check(target.textContent === bare, source + " reset changed the complete pattern");
                   }
-                  $("composite-tab").click();
+                  $("composite-tab").click(); await until(idleComposite, "composite activation");
                   $("composite-depth").value = "1"; $("composite-width").value = "1";
                   $("composite-structure-seed-mode").click(); $("composite-structure-seed").value = "1204";
                   $("composite-structure-random").click(); await until(idleComposite, "real decimal-product leaf");

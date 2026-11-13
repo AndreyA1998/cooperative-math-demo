@@ -1,4 +1,4 @@
-"""Actual page reloads preserve exact programs, but fresh visits remain empty."""
+"""Actual page reloads preserve exact programs, and fresh visits select a new bare template."""
 import asyncio
 import os
 import unittest
@@ -32,7 +32,8 @@ class ReloadStateTests(unittest.TestCase):
                 try:
                     await page.goto(url + '?id=prealgebra/test/11&seed=42')
                     await idle('atomic')
-                    self.assertTrue(await page.locator('#atomic-problem-card').is_hidden())
+                    self.assertTrue(await page.locator('#atomic-problem-card').is_visible())
+                    self.assertEqual(await page.locator('#atomic-answer-value').inner_text(), '—')
                     self.assertEqual(await page.locator('#atomic-subject').input_value(), 'algebra')
                     self.assertFalse(await page.locator('#atomic-seed-mode').is_checked())
                     await page.locator('#atomic-split').select_option('train'); await idle('atomic')
@@ -78,7 +79,8 @@ class ReloadStateTests(unittest.TestCase):
                     self.assertEqual(await page.locator('#atomic-answer-value').inner_text(), '—')
                     # A new navigation is a fresh visit, even in the same browser.
                     await page.goto(url); await idle('atomic')
-                    self.assertTrue(await page.locator('#atomic-problem-card').is_hidden())
+                    self.assertTrue(await page.locator('#atomic-problem-card').is_visible())
+                    self.assertEqual(await page.locator('#atomic-answer-value').inner_text(), '—')
                     self.assertTrue(await page.locator('#composite-schema-results').is_hidden())
                     self.assertEqual(await page.locator('#atomic-subject').input_value(), 'algebra')
                     self.assertNotIn('/api/catalogue', await page.evaluate('window.__apiPaths'))

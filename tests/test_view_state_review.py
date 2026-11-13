@@ -22,7 +22,7 @@ export async function request(method,path,query='',body=null) {
 }
 '''
 DELAYED_STORAGE = r'''
-export {saveViewState,flushViewState,readCatalogueCache,saveCatalogueCache,resetViewState} from './view-state.js?storage';
+export * from './view-state.js?storage';
 import {readViewState as read} from './view-state.js?storage';
 export async function readViewState(view) {
   const saved=await read(view);
@@ -79,7 +79,11 @@ class ViewStateReviewTests(unittest.TestCase):
             await page.wait_for_function("typeof window.__releaseRestore==='function'")
             self.assertTrue(await page.locator('#composite-structure-controls').evaluate('(node)=>node.disabled'),
                             'New build is enabled while an older saved schema can still restore over it')
+            self.assertNotIn('/api/composite/build', await page.evaluate('window.__reviewPaths ?? []'))
             await page.evaluate('window.__releaseRestore()')
+            await page.wait_for_function("!document.getElementById('composite-structure-controls').disabled")
+            self.assertIn('schema 42', await page.locator('#composite-public-template').inner_text())
+            self.assertNotIn('/api/composite/build', await page.evaluate('window.__reviewPaths ?? []'))
         self.run_page(exercise,delayed=True)
 
     def test_brand_clears_both_saved_views_and_returns_to_empty_atomic_page(self):

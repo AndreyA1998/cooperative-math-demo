@@ -1,4 +1,4 @@
-"""Cached empty visits eagerly prepare the real worker without rebuilding the catalogue."""
+"""Real Pyodide covers first activation, restore, and preloaded empty logo resets."""
 import asyncio
 import os
 import unittest
@@ -45,8 +45,8 @@ class StartupPreloadTests(unittest.TestCase):
                       document.getElementById('atomic-status').hidden
                     ''', timeout=180000)
 
-                async def catalogue_record():
-                    return await page.evaluate('''async () => {
+                async def catalogue_record(key='catalogue'):
+                    return await page.evaluate('''async key => {
                       const db = await new Promise((resolve, reject) => {
                         const request = indexedDB.open('math-demo-view-state', 1);
                         request.onsuccess = () => resolve(request.result);
@@ -54,40 +54,52 @@ class StartupPreloadTests(unittest.TestCase):
                       });
                       try {
                         return await new Promise((resolve, reject) => {
-                          const request = db.transaction('views').objectStore('views').get('catalogue');
+                          const request = db.transaction('views').objectStore('views').get(key);
                           request.onsuccess = () => resolve(request.result);
                           request.onerror = () => reject(request.error);
                         });
                       } finally { db.close(); }
-                    }''')
+                    }''', key)
 
                 try:
                     await page.goto(url)
                     await idle()
                     await page.wait_for_function('window.__startup.ready === 1', timeout=180000)
                     self.assertEqual(await page.evaluate('window.__startup.workers'), 1)
-                    self.assertEqual(await page.evaluate('window.__startup.paths'), ['/api/catalogue'])
+                    self.assertEqual(await page.evaluate('window.__startup.paths'), ['/api/catalogue', '/api/template'])
+                    self.assertTrue(await page.locator('#atomic-problem-card').is_visible())
+                    self.assertEqual(await page.locator('#atomic-answer-value').inner_text(), '—')
+                    self.assertTrue(await page.locator('#composite-schema-results').is_hidden())
+                    atomic_id = await page.locator('#atomic-problem-id').input_value()
                     cached = await catalogue_record()
                     self.assertTrue(cached['problems'])
-                    if navigation == 'logo':
-                        await page.locator('#atomic-generate-random').click()
-                        await idle()
-                        self.assertTrue(await page.locator('#atomic-problem-card').is_visible())
-                        await page.locator('#atomic-seed-mode').check()
-                        await page.locator('#composite-tab').click()
-                        await page.locator('#composite-depth').fill('1')
-                        await page.locator('#composite-width').fill('1')
-                        await page.locator('#composite-structure-seed-mode').check()
-                        await page.locator('#composite-structure-seed').fill('42')
-                        await page.locator('#composite-structure-random').click()
-                        await page.wait_for_function('''() =>
-                          !document.getElementById('composite-parameter-controls').disabled &&
-                          document.getElementById('composite-status').hidden
-                        ''', timeout=180000)
-                        await page.locator('#composite-parameter-seed-mode').check()
-                        async with page.expect_navigation():
-                            await page.locator('a.brand').click()
-                    else:
+                    await page.locator('#composite-tab').click()
+                    await page.wait_for_function("!document.getElementById('composite-structure-controls').disabled && document.getElementById('composite-status').hidden", timeout=180000)
+                    self.assertTrue(await page.locator('#composite-schema-results').is_visible())
+                    self.assertEqual(await page.locator('#composite-root-answer').inner_text(), '—')
+                    self.assertEqual((await page.evaluate('window.__startup.paths')).count('/api/composite/build'), 1)
+                    await page.evaluate("async () => (await import('./view-state.js')).flushViewState()")
+                    tab = await page.evaluate("sessionStorage.getItem('math-demo-tab')")
+                    schema = (await catalogue_record(tab + ':composite'))['state']['schema']
+                    await page.reload()
+                    await idle()
+                    await page.wait_for_function("!document.getElementById('composite-structure-controls').disabled && document.getElementById('composite-status').hidden", timeout=180000)
+                    self.assertEqual(await page.evaluate("async () => (await (await import('./view-state.js')).readViewState('composite')).schema"), schema)
+                    self.assertEqual(await page.locator('#atomic-problem-id').input_value(), atomic_id)
+                    self.assertEqual(await page.locator('#atomic-answer-value').inner_text(), '—')
+                    paths = await page.evaluate('window.__startup.paths')
+                    self.assertNotIn('/api/catalogue', paths)
+                    self.assertNotIn('/api/composite/build', paths)
+                    self.assertNotIn('/api/generate', paths)
+                    self.assertNotIn('/api/composite/variant', paths)
+                    await page.locator('#composite-structure-seed-mode').check()
+                    await page.locator('#composite-parameter-seed-mode').check()
+                    await page.locator('#atomic-tab').click()
+                    await page.locator('#atomic-seed-mode').check()
+                    async with page.expect_navigation():
+                        await page.locator('a.brand').click()
+                    await idle()
+                    if navigation == 'reload':
                         await page.reload()
                     await idle()
                     self.assertEqual(await page.evaluate('window.__startup.workers'), 1,
@@ -100,6 +112,10 @@ class StartupPreloadTests(unittest.TestCase):
                     self.assertTrue(await page.locator('#atomic-problem-card').is_hidden())
                     self.assertTrue(await page.locator('#composite-schema-results').is_hidden())
                     self.assertEqual(await page.locator('#atomic-problem-id').input_value(), '')
+                    await page.locator('#composite-tab').click()
+                    await page.wait_for_function("!document.getElementById('composite-structure-controls').disabled", timeout=180000)
+                    self.assertTrue(await page.locator('#composite-schema-results').is_hidden())
+                    await page.locator('#atomic-tab').click()
                     for prefix in ('atomic', 'composite-structure', 'composite-parameter'):
                         self.assertFalse(await page.locator('#' + prefix + '-seed-mode').is_checked())
                     await page.locator('#atomic-generate-random').click()
@@ -116,7 +132,7 @@ class StartupPreloadTests(unittest.TestCase):
         with static_origin() as server:
             asyncio.run(exercise(server.url))
 
-    def test_cached_empty_reload_prepares_runtime_before_task_selection(self):
+    def test_first_activation_restore_and_logo_reset_reload_keep_runtime_prepared(self):
         self.exercise_cached_visit('reload')
 
     def test_logo_reset_prepares_runtime_before_task_selection(self):
