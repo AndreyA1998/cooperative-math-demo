@@ -64,3 +64,9 @@
 .conversion-rules { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 22px; padding: 14px 0 19px; border-top: 1px solid #edf1ee; color: #61766a; font: .78rem/1.6 system-ui, sans-serif; }
 .conversion-rule { min-width: 0; max-width: 100%; }
 .conversion-note { width: 100%; margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+
+.tree-external-edge { fill: none; stroke: #91afca; stroke-width: 1.4; }
+.tree-external-arrow { fill: #789cbf; }
+.tree-external-chip { fill: #f0f5fb; stroke: #c2d4e7; }
+.tree-external-label { fill: #456e98; font: 12px system-ui, sans-serif; }
+.tree-external-filled .tree-external-label { fill: #315f8f; }

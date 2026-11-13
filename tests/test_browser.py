@@ -101,7 +101,8 @@ class BrowserRuntimeTests(unittest.TestCase):
         ''', timeout=900)
 
     def test_atomic_controls_replay_exact_seed_and_tabs_preserve_state(self):
-        self.run_case(r'''
+        expected = json.loads(native("GET", "/api/generate", "id=algebra%2Ftrain%2F1316&seed=0"))["problem"]
+        self.run_case("const expectedAtomicText = " + json.dumps(expected) + r''';
           await until(() => idleAtomic() && !$("atomic-problem-text").hidden, "shared atomic link");
           check($("atomic-seed-mode").checked && !$("atomic-seed-setting").hidden, "Share link lost seed mode");
           check($("atomic-seed").value === "0", "Share link lost exact seed");
@@ -110,6 +111,17 @@ class BrowserRuntimeTests(unittest.TestCase):
                 "Large native parameter lost decimal digits");
           check(!$("atomic-answer").hidden && $("atomic-answer").tagName !== "DETAILS",
                 "Atomic answer is not immediately visible");
+          let exported, filename;
+          const objectURL = URL.createObjectURL;
+          URL.createObjectURL = blob => { exported = blob; return objectURL(blob); };
+          const anchorClick = HTMLAnchorElement.prototype.click;
+          HTMLAnchorElement.prototype.click = function() { if (this.download) filename = this.download; else anchorClick.call(this); };
+          const download = $("atomic-download");
+          check(!download.hidden && download.closest(".section-heading"), "Filled atomic download is missing from the top controls");
+          download.click();
+          check(exported.type === "text/plain;charset=utf-8" && filename.endsWith(".txt"), "Atomic download is not UTF-8 TXT");
+          check(await exported.text() === expectedAtomicText, "Atomic TXT changed the canonical problem or included metadata");
+          check([...new Uint8Array(await exported.arrayBuffer())].join() === [...new TextEncoder().encode(expectedAtomicText)].join(), "Atomic TXT bytes differ from exact UTF-8 condition");
           const previous = $("atomic-problem-text").textContent;
           $("composite-tab").click();
           check($("atomic-panel").hidden && !$("composite-panel").hidden, "Composite tab did not activate");
@@ -123,6 +135,7 @@ class BrowserRuntimeTests(unittest.TestCase):
           await until(idleAtomic, "split pattern");
           change("atomic-problem-id", "prealgebra/test/11");
           await until(idleAtomic, "selected pattern");
+          check($("atomic-download").hidden, "Bare atomic pattern offers a download");
           if (!$("atomic-seed-mode").checked) $("atomic-seed-mode").click();
           const options = [...$("atomic-problem-id").options];
           check(options.every((option, index) => option.value.startsWith("prealgebra/test/")
@@ -144,7 +157,8 @@ class BrowserRuntimeTests(unittest.TestCase):
           check($("atomic-problem-id").value === options[0].value, "Random task ignored active filters");
           check(!$("atomic-seed-mode").checked && $("atomic-seed-setting").hidden, "Random task kept replay mode");
           check($("atomic-answer-value").textContent === "—" && !$("atomic-params").querySelector(".slot-filled"), "Random selection filled numbers before the separate action");
-          return "OK: atomic controls, exact seed, visible answer and persistent tabs";
+          check($("atomic-download").hidden, "Random bare atomic task offers a download");
+          return "OK: atomic controls, exact seed, visible answer, TXT download and persistent tabs";
         ''', suffix="?id=algebra%2Ftrain%2F1316&seed=0#atomic")
 
     def test_composite_generation_presentation_export_reset_and_width_fallback(self):
@@ -153,19 +167,20 @@ class BrowserRuntimeTests(unittest.TestCase):
         schema = json.loads(raw_schema)
         raw_variant = native("POST", "/api/composite/variant", body='{"schema":' + raw_schema + ',"seed":"' + MAX_SEED + '"}')
         variant = json.loads(raw_variant)
-        expected = {"schemaRaw": raw_schema, "variantRaw": raw_variant, "modelTemplate": schema["problem_template"],
+        expected = {"modelTemplate": schema["problem_template"],
                     "modelInstance": variant["instance"]["problem"], "answer": variant["instance"]["answer"],
-                    "nodes": len(schema["nodes"]), "origins": [{"node_id": node["node_id"], "number": node["number"], "source_id": node["source_id"]} for node in schema["nodes"]]}
+                    "nodes": len(schema["nodes"]), "origins": [{"node_id": node["node_id"], "number": node["number"], "source_id": node["source_id"]} for node in schema["nodes"]],
+                    "external": [{"node_id": node["node_id"], "inputs": node["inputs"]} for node in variant["presentation"]["nodes"] if node["kind"] == "bottom"]}
         self.run_case("const expected = " + json.dumps(expected) + r''';
           await until(idleAtomic, "runtime ready");
           check(!$("composite-panel").hidden && $("atomic-panel").hidden, "Direct composite tab link failed");
-          let copied, exported;
+          let copied, exported, filename;
           Object.defineProperty(navigator, "clipboard", {configurable: true,
             value: {writeText: async text => { copied = text; }}});
           const objectURL = URL.createObjectURL;
           URL.createObjectURL = blob => { exported = blob; return objectURL(blob); };
           const anchorClick = HTMLAnchorElement.prototype.click;
-          HTMLAnchorElement.prototype.click = function() { if (!this.download) anchorClick.call(this); };
+          HTMLAnchorElement.prototype.click = function() { if (this.download) filename = this.download; else anchorClick.call(this); };
           const reset = $("composite-reset-parameters");
           check(reset.disabled, "Reset enabled without a variant");
           $("composite-structure-seed-mode").click();
@@ -180,6 +195,21 @@ class BrowserRuntimeTests(unittest.TestCase):
           check($("composite-tree").matches("svg")
             && $("composite-tree").querySelectorAll(".tree-node").length === expected.nodes,
                 "Hierarchy diagram omitted mathematical nodes");
+          const externalInputs = filled => {
+            const tree = $("composite-tree");
+            check(tree.querySelectorAll(".tree-external-inputs").length === expected.external.length, "A leaf lacks external inputs");
+            check(tree.querySelectorAll(".tree-external-edge").length === expected.external.length, "A leaf lacks its incoming arrow");
+            for (const leaf of expected.external) {
+              const panel = tree.querySelector('.tree-external-inputs[data-leaf="' + leaf.node_id + '"]');
+              check(panel.querySelectorAll(".tree-external-input").length === leaf.inputs.length, "Some dynamic inputs are missing");
+              for (const input of leaf.inputs) {
+                const slot = [...panel.querySelectorAll(".tree-external-input")].find(row => row.dataset.parameter === input.name);
+                check(slot && slot.dataset.value === (filled ? input.text : ""), "External input lost its exact value");
+                check(slot.textContent === (filled ? input.name + " = " + input.text : input.name), "External input label/value is incomplete");
+              }
+            }
+          };
+          externalInputs(false);
           const subjectNames = {algebra:"Алгебра", counting_and_probability:"Комбинаторика и вероятность", geometry:"Геометрия", intermediate_algebra:"Продвинутая алгебра", number_theory:"Теория чисел", prealgebra:"Начальная алгебра", precalculus:"Предварительный курс анализа"};
           for (const item of expected.origins) {
             const group = $("composite-tree").querySelector('[data-node="' + item.node_id + '"]');
@@ -193,8 +223,9 @@ class BrowserRuntimeTests(unittest.TestCase):
           $("composite-copy-current").click();
           await until(() => copied !== undefined, "copy model template");
           check(copied === expected.modelTemplate, "Copy changed the model-facing schema text");
-          $("composite-export-schema").click();
-          check(exported && await exported.text() === expected.schemaRaw, "Export reserialized or changed raw schema JSON");
+          check($("composite-download").hidden, "Bare schema offers a download");
+          $("composite-download").click();
+          check(exported === undefined, "Bare schema downloaded a file");
           await until(() => !$("composite-presentation-note").hidden
             || [...template.querySelectorAll(".math-fragment")].every(node => node.hasAttribute("data-rendered")),
             "template typesetting", {timeout: 20000});
@@ -206,13 +237,17 @@ class BrowserRuntimeTests(unittest.TestCase):
           await until(() => idleComposite() && !$("composite-instance-result").hidden, "real parameter variant");
           check($("composite-root-answer").textContent === expected.answer, "Wrong exact root answer");
           check(template.querySelector(".slot-filled"), "Bottom values were not filled");
+          externalInputs(true);
           copied = undefined;
           $("composite-copy-current").click();
           await until(() => copied !== undefined, "copy model instance");
           check(copied === expected.modelInstance, "Copy changed the model-facing instance");
-          $("composite-export-schema").click();
-          check(await exported.text() === '{"schema":' + expected.schemaRaw + ',"variant":' + expected.variantRaw + '}', "Ready task download lost exact original schema or instance payload");
-          check($("composite-export-schema").textContent === "Скачать задачу", "Ready task has no visible download action");
+          const download = $("composite-download");
+          check(!download.hidden && download.closest(".tree-card .section-heading"), "Ready task download is missing from its top controls");
+          download.click();
+          check(exported.type === "text/plain;charset=utf-8" && filename.endsWith(".txt"), "Composite download is not UTF-8 TXT");
+          check(await exported.text() === expected.modelInstance, "Composite TXT changed the canonical problem or included answer/trace/JSON");
+          check([...new Uint8Array(await exported.arrayBuffer())].join() === [...new TextEncoder().encode(expected.modelInstance)].join(), "Composite TXT bytes differ from exact UTF-8 condition");
           check(!reset.disabled, "Reset unavailable after generation");
           $("atomic-tab").click();
           $("composite-tab").click();
@@ -220,6 +255,8 @@ class BrowserRuntimeTests(unittest.TestCase):
           check($("composite-root-answer").getBoundingClientRect().height > 0, "Answer is not visible");
           reset.click();
           check($("composite-instance-result").hidden, "Reset kept a stale variant");
+          check($("composite-download").hidden, "Reset kept a ready-task download");
+          externalInputs(false);
           check(!$("composite-root-answer").textContent && !template.querySelector(".subproblem-answer, .slot-filled"), "Reset retained answer or values");
           await until(() => [...template.querySelectorAll(".math-fragment")].every(node => node.hasAttribute("data-rendered")) || !$("composite-presentation-note").hidden, "reset typesetting", {timeout: 20000});
           check(template.textContent === templateBefore && $("composite-tree").innerHTML === treeBefore,

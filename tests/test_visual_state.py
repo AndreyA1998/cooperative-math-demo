@@ -60,6 +60,7 @@ class VisualStateTests(unittest.TestCase):
                   $("atomic-tab").click();
                   check($("atomic-answer-value").textContent === answer, "Tabs lost atomic state");
                   $("atomic-reset").click();
+                  check($("atomic-download").hidden, "Atomic reset kept the TXT download");
                   await settled();
                   check($("atomic-answer-value").textContent === "—" && $("atomic-problem-text").textContent === bare, "Atomic reset did not restore the pattern");
                   $("composite-tab").click();
@@ -104,12 +105,23 @@ class VisualStateTests(unittest.TestCase):
                   check($("composite-tree").querySelectorAll(".tree-node").length > 128,
                         "Regression did not build the requested large tree");
                   rootIsVisible("new schema");
+                  const tree = $("composite-tree");
+                  const externalCount = tree.querySelectorAll(".tree-external-input").length;
+                  check(tree.querySelectorAll(".tree-external-inputs").length === 128 && externalCount >= 128,
+                        "Large tree omitted leaf input panels");
+                  const bareInputs = [...tree.querySelectorAll(".tree-external-input")].map(input => input.textContent);
                   const initialPan = [viewport.scrollLeft, viewport.scrollTop];
                   $("composite-parameter-seed-mode").click();
                   $("composite-parameter-seed").value = "17";
                   $("composite-parameter-random").click();
                   await until(idleComposite, "large filled tree");
                   rootIsVisible("filled schema");
+                  check(tree.querySelectorAll(".tree-external-filled").length === externalCount,
+                        "Large tree left external input values unfilled");
+                  check([...tree.querySelectorAll(".tree-external-filled")].every(input => input.textContent.includes(input.dataset.value)),
+                        "Large tree clipped an external input value from its SVG text");
+                  check([...tree.querySelectorAll(".tree-external-label tspan")].every(line => line.getComputedTextLength() <= 178),
+                        "External input text overflows its chip");
                   panIs(initialPan, "initial fill");
                   viewport.scrollLeft += 347;
                   viewport.scrollTop = 243;
@@ -120,6 +132,9 @@ class VisualStateTests(unittest.TestCase):
                   panIs(manualPan, "refill");
                   $("composite-reset-parameters").click();
                   panIs(manualPan, "reset");
+                  check(!tree.querySelector(".tree-external-filled") &&
+                        JSON.stringify([...tree.querySelectorAll(".tree-external-input")].map(input => input.textContent)) === JSON.stringify(bareInputs),
+                        "Large tree reset failed to restore external input names");
                   $("composite-structure-random").click();
                   await until(idleComposite, "replacement schema");
                   rootIsVisible("replacement schema");

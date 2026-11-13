@@ -64,6 +64,7 @@ function renderTask(state) {
   byId("problem-title").textContent = "Задача № " + taskNumber(activeId);
   byId("answer-value").textContent = variant?.answer ?? "—";
   byId("reset").disabled = !variant;
+  byId("download").hidden = !variant;
   byId("copy-status").textContent = "";
   byId("copy").disabled = false;
   const chips = (presentation?.inputs ?? []).map((input) => {
@@ -112,6 +113,7 @@ async function selectTask() {
   byId("answer-value").textContent = "—";
   byId("reset").disabled = true;
   byId("copy").disabled = true;
+  byId("download").hidden = true;
   byId("renderer-note").hidden = true;
   catalogueControls.disabled = true;
   showStatus("Загружаем шаблон…");
@@ -204,6 +206,16 @@ byId("reset").addEventListener("click", () => {
   if (!state) return;
   state.variant = null;
   renderTask(state);
+});
+byId("download").addEventListener("click", () => {
+  const variant = tasks.get(activeId)?.variant;
+  if (!variant) return;
+  const url = URL.createObjectURL(new Blob([variant.problem], { type: "text/plain;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = "math-task-" + variant.seed + ".txt";
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 });
 byId("copy").addEventListener("click", async () => {
   const state = tasks.get(activeId);

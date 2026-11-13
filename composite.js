@@ -53,16 +53,65 @@ function layoutTree(schema) {
   place(schema.root_id, 0);
   return { nodes, positions, width: inset * 2 + column * (nodeWidth + columnGap) - columnGap, height: inset * 2 + nodeHeight + lastRow * rowHeight };
 }
+const inputMeasure = document.createElement("canvas").getContext("2d");
+inputMeasure.font = "12px system-ui";
+function wrapInput(value) {
+  const lines = [];
+  let line = "";
+  for (const character of value) {
+    if (line && inputMeasure.measureText(line + character).width > nodeWidth - 24) {
+      lines.push(line);
+      line = "";
+    }
+    line += character;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
 function renderTree(schema, presentation = null) {
   const { nodes, positions, width, height } = layoutTree(schema);
   const filled = new Map((presentation?.nodes ?? []).map((node) => [node.node_id, node]));
-  tree.setAttribute("viewBox", `0 0 ${width} ${height}`);
+  const external = [...nodes.values()].filter((node) => !node.children.length).map((node) => {
+    const inputs = filled.get(node.node_id)?.inputs
+      ?? node.profile.parameter_names.map((name) => ({ name, text: null }));
+    let offset = 0;
+    const rows = inputs.map((input) => {
+      const value = input.text === null ? input.name : input.name + " = " + input.text;
+      const lines = wrapInput(value);
+      const row = { input, lines, offset, height: Math.max(1, lines.length) * 16 + 12 };
+      offset += row.height + 6;
+      return row;
+    });
+    return { node, rows, height: Math.max(0, offset - 6) };
+  });
+  const inputY = height + 8;
+  const fullHeight = inputY + Math.max(0, ...external.map((panel) => panel.height)) + inset;
+  tree.setAttribute("viewBox", `0 0 ${width} ${fullHeight}`);
   tree.setAttribute("width", width);
-  tree.setAttribute("height", height);
+  tree.setAttribute("height", fullHeight);
   const defs = svgElement("defs");
   const marker = svgElement("marker", { id: "composite-tree-arrow", viewBox: "0 0 8 8", refX: 7, refY: 4, markerWidth: 5, markerHeight: 5, orient: "auto" });
   marker.append(svgElement("path", { d: "M0 0 L8 4 L0 8 Z", class: "tree-arrow" }));
   defs.append(marker);
+  const inputMarker = svgElement("marker", { id: "composite-input-arrow", viewBox: "0 0 8 8", refX: 7, refY: 4, markerWidth: 5, markerHeight: 5, orient: "auto" });
+  inputMarker.append(svgElement("path", { d: "M0 0 L8 4 L0 8 Z", class: "tree-external-arrow" }));
+  defs.append(inputMarker);
+  const externalEdges = svgElement("g");
+  const externalPanels = svgElement("g");
+  for (const { node, rows } of external) {
+    const at = positions.get(node.node_id);
+    externalEdges.append(svgElement("path", { class: "tree-external-edge", "data-leaf": node.node_id, d: `M ${at.x} ${inputY} L ${at.x} ${at.y + nodeHeight + 2}`, "marker-end": "url(#composite-input-arrow)" }));
+    const panel = svgElement("g", { class: "tree-external-inputs", "data-leaf": node.node_id, transform: `translate(${at.x - nodeWidth / 2} ${inputY})` });
+    for (const { input, lines, offset, height: rowHeight } of rows) {
+      const row = svgElement("g", { class: "tree-external-input" + (input.text !== null ? " tree-external-filled" : ""), "data-parameter": input.name, "data-value": input.text ?? "", transform: `translate(0 ${offset})` });
+      row.append(svgElement("rect", { class: "tree-external-chip", width: nodeWidth, height: rowHeight, rx: 7 }));
+      const text = svgElement("text", { class: "tree-external-label" });
+      lines.forEach((line, index) => text.append(svgElement("tspan", { x: 12, y: 20 + index * 16 }, line)));
+      row.append(text);
+      panel.append(row);
+    }
+    externalPanels.append(panel);
+  }
   const edges = svgElement("g");
   const labels = svgElement("g");
   const cards = svgElement("g");
@@ -99,7 +148,7 @@ function renderTree(schema, presentation = null) {
     card.addEventListener("keydown", (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); activate(); } });
     cards.append(card);
   }
-  tree.replaceChildren(svgElement("title", { id: "composite-svg-title" }, "Дерево задач"), svgElement("desc", { id: "composite-svg-description" }, "Ответы передаются снизу вверх. Номера соответствуют карточкам под деревом."), defs, edges, labels, cards);
+  tree.replaceChildren(svgElement("title", { id: "composite-svg-title" }, "Дерево задач"), svgElement("desc", { id: "composite-svg-description" }, "Ответы передаются снизу вверх. Номера соответствуют карточкам под деревом."), defs, edges, externalEdges, labels, cards, externalPanels);
 }
 function renderPresentation(presentation) {
   const token = ++presentationRevision;
@@ -176,7 +225,7 @@ function renderPresentation(presentation) {
 function resetParameters() {
   currentInstance = undefined;
   currentVariantRaw = undefined;
-  byId("export-schema").textContent = "Скачать шаблон";
+  byId("download").hidden = true;
   presentationRevision++;
   byId("mode").textContent = "Шаблон";
   byId("instance-result").hidden = true;
@@ -227,7 +276,7 @@ async function showSchema(schema) {
 function showInstance(instance, presentation, raw) {
   currentInstance = instance;
   currentVariantRaw = raw;
-  byId("export-schema").textContent = "Скачать задачу";
+  byId("download").hidden = false;
   byId("mode").textContent = "Вариант";
   byId("reset-parameters").disabled = false;
   byId("instance-result").hidden = false;
@@ -288,17 +337,12 @@ async function copyText(button, text) {
   button.parentElement.querySelector("output").textContent = copied ? "Скопировано" : "Выделите текст и скопируйте вручную.";
 }
 byId("copy-current").addEventListener("click", (event) => { void copyText(event.currentTarget, currentInstance?.problem ?? currentSchema.data.problem_template); });
-byId("export-schema").addEventListener("click", () => {
-  // Preserve both exact serialized payloads, including integers outside Number.
-  const raw = currentVariantRaw
-    ? '{"schema":' + currentSchema.raw + ',"variant":' + currentVariantRaw + '}'
-    : currentSchema.raw;
-  const url = URL.createObjectURL(new Blob([raw], { type: "application/json" }));
-  const link = element("a");
+byId("download").addEventListener("click", () => {
+  if (!currentInstance) return;
+  const url = URL.createObjectURL(new Blob([currentInstance.problem], { type: "text/plain;charset=utf-8" }));
+  const link = document.createElement("a");
   link.href = url;
-  link.download = currentInstance
-    ? "math-task-" + currentSchema.data.seed + "-" + currentInstance.parameter_seed + ".json"
-    : "math-schema-" + currentSchema.data.seed + ".json";
+  link.download = "math-task-" + currentSchema.data.seed + "-" + currentInstance.parameter_seed + ".txt";
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 });
