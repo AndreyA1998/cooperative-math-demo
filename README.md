@@ -61,7 +61,7 @@ node --test tests/*.test.mjs
 Обновление runtime из исследовательской ветки:
 
 ```bash
-python3 -B scripts/export_runtime.py /path/to/math_templates
+python3 -B scripts/export_runtime.py /path/to/math_dataset
 ```
 
 Команда выполняется **в публичном репозитории**, после фиксации проверенного исходного коммита. Затем проверяется и фиксируется публичный экспорт. Push в `main` запускает проверки и публикацию GitHub Pages. Источник Pages: **GitHub Actions**, настроен однократно.
