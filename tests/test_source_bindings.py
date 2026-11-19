@@ -200,6 +200,31 @@ class SourceBindingTests(unittest.TestCase):
         self.assertEqual(duration[0].names, ('elapsed_hours',))
         self.assertEqual(duration[0].fill(dict(template.original, elapsed_hours=7)), '7 hours')
 
+    def test_rotation_subject_is_text_with_three_numeric_input_slots(self):
+        from math_demo.presentation import atomic_presentation
+
+        source = 'algebra/test/786'
+        template = get_template(source)
+        bare = atomic_presentation(source)
+        with self.subTest(mode='template'):
+            subject = next(part for part in bare['segments'] if part['text'])
+            self.assertEqual(subject['kind'], 'text')
+            self.assertIn('The earth', subject['text'])
+            self.assertIn('A planet', subject['text'])
+            self.assertEqual([part['parameters'] for part in bare['segments'] if part['kind'] == 'parameter'],
+                             [['degrees'], ['elapsed_hours'], ['target_hours']])
+
+        for parameters, subject_text, slot_texts in (
+                (template.original, 'The earth', ['360', 'one day', 'one hour']),
+                ({'degrees': 65, 'elapsed_hours': 94, 'target_hours': 75},
+                 'A planet', ['65', '94 hours', '75 hours'])):
+            with self.subTest(mode='instance', subject=subject_text):
+                segments = atomic_presentation(source, parameters)['segments']
+                subject = next(part for part in segments if part['text'])
+                self.assertEqual((subject['kind'], subject['text']), ('text', subject_text))
+                self.assertEqual([part['text'] for part in segments if part['kind'] == 'parameter'], slot_texts)
+                self.assertEqual(''.join(part['text'] for part in segments), template.render(parameters))
+
 
 SOURCE_SPAN_IDS = ('algebra/test/0', 'algebra/test/18', 'algebra/test/22', 'algebra/test/141', 'algebra/test/190', 'algebra/test/202', 'algebra/test/216', 'algebra/test/260', 'algebra/test/324', 'algebra/test/329', 'algebra/test/351', 'algebra/test/435', 'algebra/test/461', 'algebra/test/488', 'algebra/test/510', 'algebra/test/610', 'algebra/test/611', 'algebra/test/687', 'algebra/test/772', 'algebra/test/786', 'algebra/test/849', 'algebra/test/879', 'algebra/test/984', 'algebra/test/993', 'algebra/test/999', 'algebra/test/1002', 'algebra/test/1012', 'algebra/test/1056', 'algebra/test/1083', 'algebra/test/1092', 'algebra/test/1155', 'algebra/test/1160', 'algebra/test/1185')
 WRAPPER_IDS = ('algebra/train/97', 'algebra/train/108', 'algebra/train/129', 'algebra/train/135', 'algebra/train/138', 'algebra/train/158', 'algebra/train/189', 'algebra/train/192', 'algebra/train/210', 'algebra/train/255', 'algebra/train/262', 'algebra/train/318', 'algebra/train/414', 'algebra/train/554', 'algebra/train/603', 'algebra/train/656', 'algebra/train/679', 'algebra/train/698', 'algebra/train/707', 'algebra/train/718', 'algebra/train/724', 'algebra/train/734', 'algebra/train/774', 'algebra/train/805', 'algebra/train/916', 'algebra/train/935', 'algebra/train/943', 'algebra/train/961', 'algebra/train/1006', 'algebra/train/1068', 'algebra/train/1078', 'algebra/train/1199', 'algebra/train/1223', 'algebra/train/1230', 'algebra/train/1262', 'algebra/train/1265', 'algebra/train/1301', 'algebra/train/1303', 'algebra/train/1312', 'algebra/train/1434', 'algebra/train/1439', 'algebra/train/1441', 'algebra/train/1480', 'algebra/train/1520', 'algebra/train/1533', 'algebra/train/1541', 'algebra/train/1580', 'algebra/train/1646', 'algebra/train/1661', 'prealgebra/train/36', 'prealgebra/train/149', 'prealgebra/train/200', 'prealgebra/train/256', 'prealgebra/train/275', 'prealgebra/train/468', 'prealgebra/train/535', 'prealgebra/train/682', 'prealgebra/train/686', 'prealgebra/train/718', 'prealgebra/train/731', 'prealgebra/train/778', 'prealgebra/train/808', 'prealgebra/train/809', 'prealgebra/train/863', 'prealgebra/train/901', 'prealgebra/train/978', 'prealgebra/train/1005', 'prealgebra/train/1122', 'prealgebra/train/1129', 'prealgebra/train/1182', 'prealgebra/train/1185', 'algebra/test/198', 'algebra/test/341', 'algebra/test/387', 'algebra/test/398', 'algebra/test/464', 'algebra/test/466', 'algebra/test/482', 'algebra/test/483', 'algebra/test/825', 'algebra/test/848', 'algebra/test/962', 'algebra/test/1075', 'algebra/test/1084', 'algebra/test/1135', 'prealgebra/test/82', 'prealgebra/test/125', 'prealgebra/test/153', 'prealgebra/test/163', 'prealgebra/test/390', 'prealgebra/test/423', 'prealgebra/test/502', 'prealgebra/test/505', 'prealgebra/test/586', 'prealgebra/test/587', 'prealgebra/test/631', 'prealgebra/test/632', 'prealgebra/test/791')

@@ -516,7 +516,9 @@ def bind_source(template):
 
     # Import lazily so the metadata adapter can also be used by the expression
     # interpreter without creating an import cycle.
-    from .expression_patterns import Interpreter, MathValue, Text, Value, definition, dependencies, resolve, symbolic_tex
+    from .expression_patterns import (
+        ConditionalLiteral, Field, Interpreter, MathValue, Text, Value, definition, dependencies, resolve, symbolic_tex,
+    )
 
     context = getclosurevars(render).nonlocals
     source, spans = context['source'], context['spans']
@@ -622,7 +624,12 @@ def bind_source(template):
             fragments = (result,)
         for fragment in fragments:
             if isinstance(fragment, Value) and fragment.names:
-                parts.append(SourceBindingField(fragment, _description(fragment)))
+                if (template.family == 'round3_algebra_test_constant_angular_rate'
+                        and source[start:end] == 'The earth'):
+                    # The condition selects a descriptive noun phrase.
+                    parts.append(Field(ConditionalLiteral(fragment.names, fragment.get, _description(fragment))))
+                else:
+                    parts.append(SourceBindingField(fragment, _description(fragment)))
             else:
                 parts.append(str(fragment.get({}) if isinstance(fragment, Value) else fragment))
         offset = end

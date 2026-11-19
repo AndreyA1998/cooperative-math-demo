@@ -1,8 +1,8 @@
 {
   "format": "math-demo-runtime-1",
   "source_commit": "cbf8e73d3dd589ab20753b752431a661ff8cfe68",
-  "sha256": "4a315f8cb52c7c1512e5a3c723f80dde03ec51ac31c9578cb082ede436a27760",
-  "bytes": 2358088,
+  "sha256": "0041d984bf28018292654ec68d2d9c489966be577740785a3cc6450a563c2c79",
+  "bytes": 2358189,
   "files": {
     "composite_dataset/__init__.py": "94b9031c79e960bd900f510f2513da3894ea45d218af965eb3dbf0f0cf034a49",
     "composite_dataset/__main__.py": "05453bd779985f856751540f1e2d2f29592652b3f5397db82dbad2bb73ba5d23",
@@ -22,7 +22,7 @@
     "math_demo/api.py": "ad49a8b3acf1e041f71aba6f43d555cd1f821768b78b8b0751ffb8ffbfaa90fc",
     "math_demo/expression_patterns.py": "9b755f79c6359e270add8cd5dbbfc010e02e99b9357365f2e4d025c96da81eab",
     "math_demo/presentation.py": "526992655022f52e53a2e5dc5a3d5881ef6126e67cf4fa1ca68d97e56b6dac03",
-    "math_demo/source_bindings.py": "7fa99b6e5a3f3bbec061a808b085f5d1038025ceeef71ed7b2cf8fa28f8982a5",
+    "math_demo/source_bindings.py": "767e8e6f1d0cad73511fddcec9f0e75490d30d7a5ce4e6a0c41ba83fe635a5f2",
     "source_dataset/LICENSE.MATH": "8f6401fb0b1fbfcac17aac8d61e4e1b0d2de9aa190d8aa655fedc5fd783b2ace",
     "source_dataset/__init__.py": "4ab64305a4a826c9af18373c915ea709c66757f8cc34d93e20d31d534181aa3d",
     "source_dataset/loader.py": "9c00f25ceaf6288c0e115c1fef69012c64be5e0fad5cc2b40e6eb5426151944e",
