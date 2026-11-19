@@ -1,12 +1,12 @@
 {
   "format": "math-demo-runtime-1",
-  "source_commit": "f0feab2f426c8a82b2cc27765c78d615cabcfbd8",
-  "sha256": "56ab943bc1ef62c115846ae22b7ce5bfdbcfa7371160760ac237ee3322e40d21",
-  "bytes": 2358231,
+  "source_commit": "cbf8e73d3dd589ab20753b752431a661ff8cfe68",
+  "sha256": "4a315f8cb52c7c1512e5a3c723f80dde03ec51ac31c9578cb082ede436a27760",
+  "bytes": 2358088,
   "files": {
     "composite_dataset/__init__.py": "94b9031c79e960bd900f510f2513da3894ea45d218af965eb3dbf0f0cf034a49",
     "composite_dataset/__main__.py": "05453bd779985f856751540f1e2d2f29592652b3f5397db82dbad2bb73ba5d23",
-    "composite_dataset/data/profiles.json.gz": "b430eacfd974fb99e26f81b456959275144fee23e07898da8cfa4eb5b825648f",
+    "composite_dataset/data/profiles.json.gz": "5d7c432ace8ed7404c1a63628991af6ac957030699b4da29c885c0529ddfe8ec",
     "composite_dataset/diagnostics.py": "6117363abb21bea2fe6c78bbdc9d59043a044c80d3eae40d0296ffe9efb2b5c2",
     "composite_dataset/fresh_profiles.py": "d62d20696cb418c99d1f7cbc3d6aad996e5046e0dac6274be5a1096456930257",
     "composite_dataset/operators.py": "10c8db8357a7a55c9d402f0d0a7fc8713484064ced8193631cad4ab56684061b",
@@ -124,6 +124,6 @@
     "template_dataset/families/word_problems/rates_and_proportions.py": "5d131a4be922b59fc92f4b67359d438efc67e5633ce8e0f660526442ae35e5d0",
     "template_dataset/families/word_problems/rates_proportions_and_costs.py": "514cd9d3fb7532dbeedc4bb069f8f5e9e029492da69370deadfbdc074c437a9a",
     "template_dataset/families/word_problems/rounding_statistics_and_progressions.py": "39ba201589fbef815d834c097208f018ee32c81a2cd0378a60e37f3c2168f9a8",
-    "template_dataset/registry.py": "7dfbc175c0e5fe02a3c76c3fa4c76a16e1b0f1a65aad33aac15ebc21735f02d5"
+    "template_dataset/registry.py": "94ae437a0b6ce0ad6246e8b5a586187ee1f7aad28ab70d3563b08cd560be668e"
   }
 }

@@ -11,6 +11,7 @@ ensure_runtime()
 
 from template_dataset import solve as atomic_solve
 from composite_dataset import build_schema, instantiate, solve
+from composite_dataset import profiles
 from template_dataset.registry import registry
 from math_demo.api import dispatch_json
 
@@ -105,6 +106,14 @@ class AtomicApiTests(unittest.TestCase):
                     status, payload = self.get("generate", id=PROBLEM_ID, seed="0")
                 self.assertEqual(status, 500)
                 self.assertNotIn("private diagnostic", payload["error"])
+
+
+class CataloguePackagingTests(unittest.TestCase):
+    def test_loads_the_packaged_catalogue_without_rebuilding(self):
+        profiles._default_catalogue.cache_clear()
+        self.addCleanup(profiles._default_catalogue.cache_clear)
+        with patch.object(profiles, '_build_catalogue', side_effect=AssertionError('packaged catalogue rejected')):
+            self.assertTrue(profiles.get_catalogue())
 
 
 class CompositeApiTests(unittest.TestCase):

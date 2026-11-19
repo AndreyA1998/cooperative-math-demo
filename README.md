@@ -47,29 +47,17 @@
 
 ## Разработка и публикация
 
-Для автоматических проверок нужны Linux, Python 3.14.10 и Node.js. Выполняйте команды из корня клона. Если Python 3.14.10 расположен вне `PATH`, подставьте его полный путь вместо `python3.14`. На Mac выполняются редактирование, синхронизация и визуальная проверка.
+Для автоматических проверок нужны Linux, Python 3.14.10 и Node.js. Выполняйте команды из корня клона. На Mac открывайте опубликованное демо в браузере.
 
 ```bash
-mkdir -p .cache/tmp
-export TMPDIR="$PWD/.cache/tmp"
-export PIP_CACHE_DIR="${PIP_CACHE_DIR:-$PWD/.cache/pip}"
-export PLAYWRIGHT_BROWSERS_PATH="$PWD/.cache/ms-playwright"
 python3.14 -m venv .venv
 .venv/bin/python -m pip install -r requirements-test.txt
-.venv/bin/python -m playwright install --only-shell chromium
+PLAYWRIGHT_BROWSERS_PATH="$PWD/.cache/ms-playwright" .venv/bin/python -m playwright install --only-shell chromium
 .venv/bin/python -B scripts/check.py
 node --test tests/*.test.mjs
 .venv/bin/python -B scripts/build_site.py
 ```
 
-Проверки запускаются на распакованном публичном runtime, без доступа к исследовательскому репозиторию. Playwright с Chromium проверяет Pyodide, Worker, KaTeX и состояние интерфейса. Полная проверка требует браузер. Сборка `dist/` включает только необходимые статические файлы. Для проверки сборки используйте статический HTTP-сервер на Linux. На Mac открывайте опубликованное демо в браузере.
-
-На Linux обновите runtime из зафиксированной и проверенной исследовательской копии.
-
-```bash
-.venv/bin/python -B scripts/export_runtime.py /path/to/math_dataset
-```
-
-Команда выполняется **в публичном репозитории**. Затем проверяется и фиксируется публичный экспорт. Push в `main` запускает проверки и публикацию GitHub Pages через GitHub Actions.
+Проверки работают с публичным runtime. Для обновления экспорта запустите из этого клона `.venv/bin/python -B scripts/export_runtime.py /path/to/math_dataset`, указав проверенную исследовательскую копию с зафиксированным коммитом. Push в `main` запускает проверки и публикацию GitHub Pages.
 
 [Сторонние компоненты и лицензии](THIRD_PARTY.md). Первое открытие требует сети для статических файлов Pyodide и KaTeX; офлайн-работа после перезапуска страницы не гарантируется. Задачи и решения не отправляются на вычислительный сервер.
